@@ -67,6 +67,8 @@
 
 #define ARIZONA_MAX_PDM_SPK 2
 
+#define ARIZONA_NUM_MICD_LEVEL 4
+
 struct regulator_init_data;
 
 struct arizona_micd_config {
@@ -98,6 +100,9 @@ struct arizona_pdata {
 
 	/** GPIO for mic detection polarity */
 	int micd_pol_gpio;
+
+	/** Mic detect level parameters */
+	int micd_level[ARIZONA_NUM_MICD_LEVEL];
 
 	/** Headset polarity configurations */
 	struct arizona_micd_config *micd_configs;

@@ -974,10 +974,10 @@ void fpsimd_release_task(struct task_struct *dead_task)
 /*
  * Trapped SVE access
  *
- * Storage is allocated for the full SVE state, the current FPSIMD
- * register contents are migrated across, and TIF_SVE is set so that
- * the SVE access trap will be disabled the next time this task
- * reaches ret_to_user.
+ * Storage is allocated for the full SVE state so that the code
+ * running subsequently has somewhere to save the SVE registers to. We
+ * then rely on ret_to_user to actually convert the FPSIMD registers
+ * to SVE state by flushing as required.
  *
  * TIF_SVE should be clear on entry: otherwise, fpsimd_restore_current_state()
  * would have disabled the SVE access trap for userspace during
@@ -995,14 +995,24 @@ void do_sve_acc(unsigned int esr, struct pt_regs *regs)
 
 	get_cpu_fpsimd_context();
 
-	fpsimd_save();
+	set_thread_flag(TIF_SVE_NEEDS_FLUSH);
+	/*
+	 * We should not be here with SVE enabled. TIF_SVE will be set
+	 * before returning to userspace by fpsimd_restore_current_state().
+	 */
+	WARN_ON(test_thread_flag(TIF_SVE));
 
-	/* Force ret_to_user to reload the registers: */
-	fpsimd_flush_task_state(current);
-
-	fpsimd_to_sve(current);
-	if (test_and_set_thread_flag(TIF_SVE))
-		WARN_ON(1); /* SVE access shouldn't have trapped */
+	/*
+	 * When the FPSIMD state is loaded:
+	 *	- The return path (see fpsimd_restore_current_state) requires
+	 *	  the vector length to be loaded beforehand.
+	 *	- We need to rebind the task to the CPU so the newly allocated
+	 *	  SVE state is used when the task is saved.
+	 */
+	if (!test_thread_flag(TIF_FOREIGN_FPSTATE)) {
+		sve_set_vq(sve_vq_from_vl(current->thread.sve_vl) - 1);
+		fpsimd_bind_task_to_cpu();
+	}
 
 	put_cpu_fpsimd_context();
 }

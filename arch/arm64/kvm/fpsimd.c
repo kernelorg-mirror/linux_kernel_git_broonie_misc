@@ -55,8 +55,8 @@ error:
  * Here, we just set the correct metadata to indicate that the FPSIMD
  * state in the cpu regs (if any) belongs to current on the host.
  *
- * TIF_SVE is backed up here, since it may get clobbered with guest state.
- * This flag is restored by kvm_arch_vcpu_put_fp(vcpu).
+ * TIF_SVE_EXEC is backed up here, since it may get clobbered with
+ * guest state.  This flag is restored by kvm_arch_vcpu_put_fp(vcpu).
  */
 void kvm_arch_vcpu_load_fp(struct kvm_vcpu *vcpu)
 {
@@ -67,7 +67,7 @@ void kvm_arch_vcpu_load_fp(struct kvm_vcpu *vcpu)
 			      KVM_ARM64_HOST_SVE_ENABLED);
 	vcpu->arch.flags |= KVM_ARM64_FP_HOST;
 
-	if (test_thread_flag(TIF_SVE))
+	if (test_thread_flag(TIF_SVE_EXEC))
 		vcpu->arch.flags |= KVM_ARM64_HOST_SVE_IN_USE;
 
 	if (read_sysreg(cpacr_el1) & CPACR_EL1_ZEN_EL0EN)
@@ -90,7 +90,7 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 					 vcpu->arch.sve_max_vl);
 
 		clear_thread_flag(TIF_FOREIGN_FPSTATE);
-		update_thread_flag(TIF_SVE, vcpu_has_sve(vcpu));
+		update_thread_flag(TIF_SVE_EXEC, vcpu_has_sve(vcpu));
 	}
 }
 
@@ -127,7 +127,7 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 			sysreg_clear_set(CPACR_EL1, CPACR_EL1_ZEN_EL0EN, 0);
 	}
 
-	update_thread_flag(TIF_SVE,
+	update_thread_flag(TIF_SVE_EXEC,
 			   vcpu->arch.flags & KVM_ARM64_HOST_SVE_IN_USE);
 
 	local_irq_restore(flags);

@@ -720,8 +720,11 @@ static void sve_init_header_from_task(struct user_sve_header *header,
 
 	memset(header, 0, sizeof(*header));
 
-	header->flags = test_tsk_thread_flag(target, TIF_SVE) ?
-		SVE_PT_REGS_SVE : SVE_PT_REGS_FPSIMD;
+	if (test_tsk_thread_flag(target, TIF_SVE_EXEC) &&
+	    !test_tsk_thread_flag(target, TIF_SVE_FPSIMD_REGS))
+		header->flags = SVE_PT_REGS_SVE;
+	else
+		header->flags = SVE_PT_REGS_FPSIMD;
 	if (test_tsk_thread_flag(target, TIF_SVE_VL_INHERIT))
 		header->flags |= SVE_PT_VL_INHERIT;
 
@@ -828,7 +831,8 @@ static int sve_set(struct task_struct *target,
 	if ((header.flags & SVE_PT_REGS_MASK) == SVE_PT_REGS_FPSIMD) {
 		ret = __fpr_set(target, regset, pos, count, kbuf, ubuf,
 				SVE_PT_FPSIMD_OFFSET);
-		clear_tsk_thread_flag(target, TIF_SVE);
+		clear_tsk_thread_flag(target, TIF_SVE_EXEC);
+		clear_tsk_thread_flag(target, TIF_SVE_FPSIMD_REGS);
 		goto out;
 	}
 
@@ -852,7 +856,8 @@ static int sve_set(struct task_struct *target,
 	 * unmodified.
 	 */
 	fpsimd_sync_to_sve(target);
-	set_tsk_thread_flag(target, TIF_SVE);
+	set_tsk_thread_flag(target, TIF_SVE_EXEC);
+	clear_tsk_thread_flag(target, TIF_SVE_FPSIMD_REGS);
 
 	BUILD_BUG_ON(SVE_PT_SVE_OFFSET != sizeof(header));
 	start = SVE_PT_SVE_OFFSET;

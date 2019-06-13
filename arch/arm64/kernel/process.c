@@ -364,13 +364,14 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	 * Detach src's sve_state (if any) from dst so that it does not
 	 * get erroneously used or freed prematurely.  dst's sve_state
 	 * will be allocated on demand later on if dst uses SVE.
-	 * For consistency, also clear TIF_SVE here: this could be done
+	 * For consistency, also clear TIF_SVE_* here: this could be done
 	 * later in copy_process(), but to avoid tripping up future
-	 * maintainers it is best not to leave TIF_SVE and sve_state in
+	 * maintainers it is best not to leave TIF_SVE_* and sve_state in
 	 * an inconsistent state, even temporarily.
 	 */
 	dst->thread.sve_state = NULL;
-	clear_tsk_thread_flag(dst, TIF_SVE);
+	clear_tsk_thread_flag(dst, TIF_SVE_EXEC);
+	clear_tsk_thread_flag(dst, TIF_SVE_FPSIMD_REGS);
 
 	/* clear any pending asynchronous tag fault raised by the parent */
 	clear_tsk_thread_flag(dst, TIF_MTE_ASYNC_FAULT);

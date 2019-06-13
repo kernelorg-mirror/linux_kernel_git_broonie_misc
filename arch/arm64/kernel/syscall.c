@@ -186,7 +186,8 @@ static inline void sve_user_discard(void)
 	if (!system_supports_sve())
 		return;
 
-	clear_thread_flag(TIF_SVE);
+	clear_thread_flag(TIF_SVE_EXEC);
+	clear_thread_flag(TIF_SVE_FULL_REGS);
 
 	/*
 	 * task_fpsimd_load() won't be called to update CPACR_EL1 in

@@ -205,7 +205,8 @@ static int restore_fpsimd_context(struct fpsimd_context __user *ctx)
 	__get_user_error(fpsimd.fpsr, &ctx->fpsr, err);
 	__get_user_error(fpsimd.fpcr, &ctx->fpcr, err);
 
-	clear_thread_flag(TIF_SVE);
+	clear_thread_flag(TIF_SVE_EXEC);
+	clear_thread_flag(TIF_SVE_FULL_REGS);
 
 	/* load the hardware registers from the fpsimd_state structure */
 	if (!err)
@@ -229,7 +230,7 @@ static int preserve_sve_context(struct sve_context __user *ctx)
 	unsigned int vl = current->thread.sve_vl;
 	unsigned int vq = 0;
 
-	if (test_thread_flag(TIF_SVE))
+	if (test_thread_flag(TIF_SVE_EXEC))
 		vq = sve_vq_from_vl(vl);
 
 	memset(reserved, 0, sizeof(reserved));
@@ -241,7 +242,7 @@ static int preserve_sve_context(struct sve_context __user *ctx)
 	BUILD_BUG_ON(sizeof(ctx->__reserved) != sizeof(reserved));
 	err |= __copy_to_user(&ctx->__reserved, reserved, sizeof(reserved));
 
-	if (vq) {
+	if (vq && test_thread_flag(TIF_SVE_FULL_REGS)) {
 		/*
 		 * This assumes that the SVE state has already been saved to
 		 * the task struct by calling the function
@@ -269,7 +270,8 @@ static int restore_sve_fpsimd_context(struct user_ctxs *user)
 		return -EINVAL;
 
 	if (sve.head.size <= sizeof(*user->sve)) {
-		clear_thread_flag(TIF_SVE);
+		clear_thread_flag(TIF_SVE_EXEC);
+		clear_thread_flag(TIF_SVE_FULL_REGS);
 		goto fpsimd_only;
 	}
 
@@ -296,7 +298,8 @@ static int restore_sve_fpsimd_context(struct user_ctxs *user)
 	if (err)
 		return -EFAULT;
 
-	set_thread_flag(TIF_SVE);
+	set_thread_flag(TIF_SVE_EXEC);
+	set_thread_flag(TIF_SVE_FULL_REGS);
 
 fpsimd_only:
 	/* copy the FP and status/control registers */
@@ -587,7 +590,7 @@ static int setup_sigframe_layout(struct rt_sigframe_user_layout *user,
 	if (system_supports_sve()) {
 		unsigned int vq = 0;
 
-		if (add_all || test_thread_flag(TIF_SVE)) {
+		if (add_all || test_thread_flag(TIF_SVE_EXEC)) {
 			int vl = sve_max_vl;
 
 			if (!add_all)

@@ -769,6 +769,10 @@ static int sve_get(struct task_struct *target,
 
 	/* Otherwise: full SVE case */
 
+	/* The flush should have happened when the thread was stopped */
+	if (test_and_clear_tsk_thread_flag(target, TIF_SVE_NEEDS_FLUSH))
+		WARN(1, "TIF_SVE_NEEDS_FLUSH was set");
+
 	BUILD_BUG_ON(SVE_PT_SVE_OFFSET != sizeof(header));
 	start = SVE_PT_SVE_OFFSET;
 	end = SVE_PT_SVE_FFR_OFFSET(vq) + SVE_PT_SVE_FFR_SIZE(vq);
@@ -831,6 +835,11 @@ static int sve_set(struct task_struct *target,
 		ret = __fpr_set(target, regset, pos, count, kbuf, ubuf,
 				SVE_PT_FPSIMD_OFFSET);
 		clear_tsk_thread_flag(target, TIF_SVE);
+		/*
+		 * If ptrace requested to use FPSIMD, then don't try to
+		 * re-enable SVE when the task is running again.
+		 */
+		clear_tsk_thread_flag(target, TIF_SVE_NEEDS_FLUSH);
 		goto out;
 	}
 
@@ -855,6 +864,8 @@ static int sve_set(struct task_struct *target,
 	 */
 	fpsimd_sync_to_sve(target);
 	set_tsk_thread_flag(target, TIF_SVE);
+	/* Don't flush SVE registers on return as ptrace will update them. */
+	clear_tsk_thread_flag(target, TIF_SVE_NEEDS_FLUSH);
 
 	BUILD_BUG_ON(SVE_PT_SVE_OFFSET != sizeof(header));
 	start = SVE_PT_SVE_OFFSET;

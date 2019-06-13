@@ -215,6 +215,8 @@ static bool have_cpu_fpsimd_context(void)
  */
 static void __sve_free(struct task_struct *task)
 {
+	/* SVE context will be zeroed when allocated. */
+	clear_tsk_thread_flag(task, TIF_SVE_NEEDS_FLUSH);
 	kfree(task->thread.sve_state);
 	task->thread.sve_state = NULL;
 }
@@ -227,14 +229,45 @@ static void sve_free(struct task_struct *task)
 }
 
 /*
+ * In order to avoid the expense of storing the SVE registers when not
+ * in active use by tasks we keep track of the task's SVE usage and
+ * only allocate space for SVE registers for tasks that need it.
+ *
  * TIF_SVE controls whether a task can use SVE without trapping while
  * in userspace, and also the way a task's FPSIMD/SVE state is stored
- * in thread_struct.
+ * in thread_struct. The kernel uses this flag to track whether a
+ * user task has active SVE state, and therefore whether full SVE
+ * register state needs to be tracked.  If not, the cheaper FPSIMD
+ * context handling code can be used instead of the more costly SVE
+ * equivalents.
  *
- * The kernel uses this flag to track whether a user task is actively
- * using SVE, and therefore whether full SVE register state needs to
- * be tracked.  If not, the cheaper FPSIMD context handling code can
- * be used instead of the more costly SVE equivalents.
+ * Since syscalls cause all the SVE register state other than that
+ * shared with FPSIMD to be discarded we also optimize the case where
+ * only the subset of SVE registers shared with FPSIMD needs to be
+ * stored, using an additional flag TIF_SVE_NEEDS_FLUSH to indicate
+ * this case.
+ *
+ *
+ *  * FPSR and FPCR are always stored in task->thread.uw.fpsimd_state
+ *    irrespective of any flags, since these are not vector length
+ *    dependent.
+ *
+ *  * TIF_SVE and TIF_SVE_NEED_FLUSH both clear:
+ *
+ *    An attempt by the user task to execute an SVE instruction causes
+ *    do_sve_acc() to be called, which does some preparation and sets
+ *    TIF_SVE_NEEDS_FLUSH which will then in turn set TIF_SVE on
+ *    return to userspace.
+ *
+ *    When stored, FPSIMD registers V0-V31 are encoded in
+ *    task->thread.uw.fpsimd_state; bits [max : 128] for each of Z0-Z31 are
+ *    logically zero but not stored anywhere; P0-P15 and FFR are not
+ *    stored and have unspecified values from userspace's point of
+ *    view.  For hygiene purposes, the kernel zeroes them on next use,
+ *    but userspace is discouraged from relying on this.
+ *
+ *    task->thread.sve_state does not need to be non-NULL, valid or any
+ *    particular size: it must not be dereferenced.
  *
  *  * TIF_SVE set:
  *
@@ -249,28 +282,25 @@ static void sve_free(struct task_struct *task)
  *    task->thread.sve_state must point to a valid buffer at least
  *    sve_state_size(task) bytes in size.
  *
- *    During any syscall, the kernel may optionally clear TIF_SVE and
- *    discard the vector state except for the FPSIMD subset.
+ *    During any syscall the ABI allows the kernel to discard the
+ *    vector state other than the FPSIMD subset. When this is done
+ *    TIF_SVE_NEEDS_FLUSH will be set and TIF_SVE will be cleared.
  *
- *  * TIF_SVE clear:
+ *  * TIF_SVE_NEEDS_FLUSH set:
  *
- *    An attempt by the user task to execute an SVE instruction causes
- *    do_sve_acc() to be called, which does some preparation and then
- *    sets TIF_SVE.
+ *    The task can execute SVE instructions while in userspace without
+ *    trapping to the kernel.
  *
- *    When stored, FPSIMD registers V0-V31 are encoded in
- *    task->thread.uw.fpsimd_state; bits [max : 128] for each of Z0-Z31 are
- *    logically zero but not stored anywhere; P0-P15 and FFR are not
- *    stored and have unspecified values from userspace's point of
- *    view.  For hygiene purposes, the kernel zeroes them on next use,
- *    but userspace is discouraged from relying on this.
+ *    The SVE register state is stored as for the case with both
+ *    TIF_SVE and TIF_SVE_NEEDS_FLUSH clear. On return to userspace
+ *    the SVE registers will be set and TIF_SVE will be set.
  *
- *    task->thread.sve_state does not need to be non-NULL, valid or any
- *    particular size: it must not be dereferenced.
+ *  * TIF_SVE and TIF_SVE_NEED_FLUSH both set:
  *
- *  * FPSR and FPCR are always stored in task->thread.uw.fpsimd_state
- *    irrespective of whether TIF_SVE is clear or set, since these are
- *    not vector length dependent.
+ *    If both TIF_SVE and TIF_SVE_NEED_FLUSH are set then
+ *    TIF_SVE_NEED_FLUSH takes precedence, setting it is treated as
+ *    invalidating the SVE state.
+ *
  */
 
 /*
@@ -279,18 +309,37 @@ static void sve_free(struct task_struct *task)
  * This function should be called only when the FPSIMD/SVE state in
  * thread_struct is known to be up to date, when preparing to enter
  * userspace.
+ *
+ * When TIF_SVE_NEEDS_FLUSH is set, the SVE state will be restored from the
+ * FPSIMD state.
+ *
+ * TIF_SVE_NEEDS_FLUSH and TIF_SVE set at the same time should never happen.
+ * In the unlikely case it happens, the code is able to cope with it. It will
+ * first restore the SVE registers and then flush them in
+ * fpsimd_restore_current_state.
  */
 static void task_fpsimd_load(void)
 {
 	WARN_ON(!system_supports_fpsimd());
 	WARN_ON(!have_cpu_fpsimd_context());
 
-	if (system_supports_sve() && test_thread_flag(TIF_SVE))
-		sve_load_state(sve_pffr(&current->thread),
-			       &current->thread.uw.fpsimd_state.fpsr,
-			       sve_vq_from_vl(current->thread.sve_vl) - 1);
-	else
-		fpsimd_load_state(&current->thread.uw.fpsimd_state);
+	/* Ensure that we only evaluate system_supports_sve() once. */
+	if (system_supports_sve()) {
+		if (test_and_clear_thread_flag(TIF_SVE_NEEDS_FLUSH)) {
+			sve_load_from_fpsimd_state(&current->thread.uw.fpsimd_state,
+				   sve_vq_from_vl(current->thread.sve_vl) - 1);
+			set_thread_flag(TIF_SVE);
+			return;
+
+		} else if (test_thread_flag(TIF_SVE)) {
+			sve_load_state(sve_pffr(&current->thread),
+				       &current->thread.uw.fpsimd_state.fpsr,
+				       sve_vq_from_vl(current->thread.sve_vl) - 1);
+			return;
+		}
+	}
+
+	fpsimd_load_state(&current->thread.uw.fpsimd_state);
 }
 
 /*
@@ -1161,8 +1210,26 @@ void fpsimd_restore_current_state(void)
 	get_cpu_fpsimd_context();
 
 	if (test_and_clear_thread_flag(TIF_FOREIGN_FPSTATE)) {
+		/*
+		 * If TIF_SVE_NEEDS_FLUSH is set this takes care of
+		 * restoring the SVE state that is preserved over
+		 * syscalls should we have context switched.
+		 */
 		task_fpsimd_load();
 		fpsimd_bind_task_to_cpu();
+	}
+
+	if (test_and_clear_thread_flag(TIF_SVE_NEEDS_FLUSH)) {
+		/*
+		 * The userspace had SVE enabled on entry to the kernel
+		 * and requires the state to be flushed.
+		 *
+		 * We rely on the vector length to be set correctly beforehand
+		 * when converting a loaded FPSIMD state to SVE state.
+		 */
+		sve_flush_live();
+		sve_user_enable();
+		set_thread_flag(TIF_SVE);
 	}
 
 	put_cpu_fpsimd_context();

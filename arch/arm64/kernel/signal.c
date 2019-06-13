@@ -307,8 +307,10 @@ fpsimd_only:
 	__get_user_error(fpsimd.fpcr, &user->fpsimd->fpcr, err);
 
 	/* load the hardware registers from the fpsimd_state structure */
-	if (!err)
+	if (!err) {
+		clear_thread_flag(TIF_SVE_NEEDS_FLUSH);
 		fpsimd_update_current_state(&fpsimd);
+	}
 
 	return err ? -EFAULT : 0;
 }
@@ -521,6 +523,15 @@ static int restore_sigframe(struct pt_regs *regs,
 		} else {
 			err = restore_fpsimd_context(user.fpsimd);
 		}
+
+		/*
+		 * When successfully restoring the:
+		 *	- FPSIMD context, we don't want to re-enable SVE
+		 *	- SVE context, we don't want to override what was
+		 *	restored
+		 */
+		if (err == 0)
+			clear_thread_flag(TIF_SVE_NEEDS_FLUSH);
 	}
 
 	return err;
@@ -950,7 +961,8 @@ asmlinkage void do_notify_resume(struct pt_regs *regs,
 				rseq_handle_notify_resume(NULL, regs);
 			}
 
-			if (thread_flags & _TIF_FOREIGN_FPSTATE)
+			if (thread_flags & (_TIF_FOREIGN_FPSTATE |
+					    _TIF_SVE_NEEDS_FLUSH))
 				fpsimd_restore_current_state();
 		}
 

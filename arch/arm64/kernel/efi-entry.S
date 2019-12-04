@@ -25,7 +25,7 @@
 	 * we want to be. The kernel image wants to be placed at TEXT_OFFSET
 	 * from start of RAM.
 	 */
-ENTRY(entry)
+SYM_CODE_START(entry)
 	/*
 	 * Create a stack frame to save FP/LR with extra space
 	 * for image_addr variable passed to efi_entry().
@@ -117,4 +117,4 @@ efi_load_fail:
 	ret
 
 entry_end:
-ENDPROC(entry)
+SYM_CODE_END(entry)

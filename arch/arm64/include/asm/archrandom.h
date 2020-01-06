@@ -66,10 +66,32 @@ static inline bool __init __early_cpu_has_rndr(void)
 	return (ftr >> ID_AA64ISAR0_RNDR_SHIFT) & 0xf;
 }
 
+/*
+ * Our ARCH_RANDOM implementation does not function until relatively
+ * late in the boot when cpufeature has detertmined system
+ * capabilities so the core code can't use arch_get_random*() to
+ * initialize, instead we call this function to inject data from
+ * setup_arch() if the boot CPU supports v8.5-RNG.
+ */
+static inline void __init arm64_add_early_rndr_entropy(void)
+{
+	unsigned long val;
+	int i;
+
+	if (!__early_cpu_has_rndr())
+		return;
+
+	/* Add multiple values to mirror the generic code. */
+	for (i = 0; i < 16; i++)
+		if (__arm64_rndr(&val))
+			add_device_randomness(&val, sizeof(val));
+}
+
 #else
 
 static inline bool __arm64_rndr(unsigned long *v) { return false; }
 static inline bool __init __early_cpu_has_rndr(void) { return false; }
+static inline void __init arm64_add_early_rndr_entropy(void) { }
 
 #endif /* CONFIG_ARCH_RANDOM */
 #endif /* _ASM_ARCHRANDOM_H */

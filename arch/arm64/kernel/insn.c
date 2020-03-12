@@ -57,7 +57,27 @@ bool __kprobes aarch64_insn_is_nop(u32 insn)
 	if (!aarch64_insn_is_hint(insn))
 		return false;
 
+	/*
+	 * The PAC and BTI instructons are not strictly NOPs but until
+	 * better support is added we can treat them as such.
+	 */
 	switch (insn & 0xFE0) {
+	case AARCH64_INSN_HINT_PACIA_1716:
+	case AARCH64_INSN_HINT_PACIB_1716:
+	case AARCH64_INSN_HINT_AUTIA_1716:
+	case AARCH64_INSN_HINT_AUTIB_1716:
+	case AARCH64_INSN_HINT_PACIAZ:
+	case AARCH64_INSN_HINT_PACIASP:
+	case AARCH64_INSN_HINT_PACIBZ:
+	case AARCH64_INSN_HINT_PACIBSP:
+	case AARCH64_INSN_HINT_AUTIAZ:
+	case AARCH64_INSN_HINT_AUTIASP:
+	case AARCH64_INSN_HINT_AUTIBZ:
+	case AARCH64_INSN_HINT_AUTIBSP:
+	case AARCH64_INSN_HINT_BTI:
+	case AARCH64_INSN_HINT_BTIC:
+	case AARCH64_INSN_HINT_BTIJ:
+	case AARCH64_INSN_HINT_BTIJC:
 	case AARCH64_INSN_HINT_NOP:
 		return true;
 	default:

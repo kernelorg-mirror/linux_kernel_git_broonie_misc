@@ -20,4 +20,10 @@
 		SYM_FUNC_END(x);		\
 		SYM_FUNC_END_ALIAS(__pi_##x)
 
+/*
+ * Enable additional architecture extensions (eg, for optimized asm
+ * routines).
+ */
+#define ARM64_EXTENSIONS(x) .arch armv8-a+x
+
 #endif

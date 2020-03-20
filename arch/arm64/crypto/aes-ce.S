@@ -12,7 +12,7 @@
 #define AES_FUNC_START(func)		SYM_FUNC_START(ce_ ## func)
 #define AES_FUNC_END(func)		SYM_FUNC_END(ce_ ## func)
 
-	.arch		armv8-a+crypto
+ARM64_EXTENSIONS(crypto)
 
 	xtsmask		.req	v16
 	cbciv		.req	v16

@@ -9,7 +9,8 @@
 #include <asm/assembler.h>
 
 	.text
-	.arch		armv8-a+crypto
+
+ARM64_EXTENSIONS(crypto)
 
 	dga		.req	q20
 	dgav		.req	v20

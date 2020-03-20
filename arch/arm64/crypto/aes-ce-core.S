@@ -6,7 +6,7 @@
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 
-	.arch		armv8-a+crypto
+ARM64_EXTENSIONS(crypto)
 
 SYM_FUNC_START(__aes_ce_encrypt)
 	sub		w3, w3, #2

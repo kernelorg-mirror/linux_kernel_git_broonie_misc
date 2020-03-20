@@ -57,7 +57,8 @@
 	HH34		.req	v19
 
 	.text
-	.arch		armv8-a+crypto
+
+ARM64_EXTENSIONS(crypto)
 
 	.macro		__pmull_p64, rd, rn, rm
 	pmull		\rd\().1q, \rn\().1d, \rm\().1d

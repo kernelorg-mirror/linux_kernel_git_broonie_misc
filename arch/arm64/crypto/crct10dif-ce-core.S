@@ -66,7 +66,8 @@
 #include <asm/assembler.h>
 
 	.text
-	.cpu		generic+crypto
+
+ARM64_EXTENSIONS(crypto)
 
 	init_crc	.req	w19
 	buf		.req	x20

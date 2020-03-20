@@ -9,7 +9,8 @@
 #include <asm/assembler.h>
 
 	.text
-	.arch		armv8-a+crypto
+
+ARM64_EXTENSIONS(crypto)
 
 	k0		.req	v0
 	k1		.req	v1

@@ -9,7 +9,8 @@
 #include <asm/assembler.h>
 
 	.text
-	.arch	armv8-a+crypto
+
+ARM64_EXTENSIONS(crypto)
 
 	/*
 	 * void ce_aes_ccm_auth_data(u8 mac[], u8 const in[], u32 abytes,

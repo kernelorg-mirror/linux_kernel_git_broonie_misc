@@ -14,8 +14,18 @@
 #include "../kselftest.h"
 #include "parse_vdso.h"
 
+/*
+ * ARM64's vDSO exports its getcpu() implementation with a different
+ * name and version from other architectures, so we need to handle it
+ * as a special case.
+ */
+#if defined(__aarch64__)
+const char *version = "LINUX_2.6.39";
+const char *name = "__kernel_getcpu";
+#else
 const char *version = "LINUX_2.6";
 const char *name = "__vdso_getcpu";
+#endif
 
 struct getcpu_cache;
 typedef long (*getcpu_t)(unsigned int *, unsigned int *,

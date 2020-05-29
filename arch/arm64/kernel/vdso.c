@@ -9,6 +9,7 @@
 
 #include <linux/cache.h>
 #include <linux/clocksource.h>
+#include <linux/cpuhotplug.h>
 #include <linux/elf.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -18,6 +19,7 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/slab.h>
+#include <linux/smp.h>
 #include <linux/time_namespace.h>
 #include <linux/timekeeper_internal.h>
 #include <linux/vmalloc.h>
@@ -466,6 +468,26 @@ out:
 }
 #endif /* CONFIG_COMPAT */
 
+static void vdso_cpu_init(void *p)
+{
+	struct arm64_vdso_data *data = (struct arm64_vdso_data *)vdso_data;
+	unsigned int cpu;
+
+	if (vdso_cpu_offset()) {
+		cpu = smp_processor_id();
+
+		data->cpu_data[cpu].cpu = cpu;
+		data->cpu_data[cpu].node = cpu_to_node(cpu);
+	}
+}
+
+static int vdso_cpu_online(unsigned int cpu)
+{
+	smp_call_function_single(cpu, vdso_cpu_init, NULL, 1);
+
+	return 0;
+}
+
 static int vdso_mremap(const struct vm_special_mapping *sm,
 		struct vm_area_struct *new_vma)
 {
@@ -493,6 +515,12 @@ static int __init vdso_init(void)
 {
 	vdso_info[VDSO_ABI_AA64].dm = &aarch64_vdso_maps[AA64_MAP_VVAR];
 	vdso_info[VDSO_ABI_AA64].cm = &aarch64_vdso_maps[AA64_MAP_VDSO];
+
+	/*
+	 * Initialize per-CPU data, callback runs for all current and
+	 * future CPUs.
+	 */
+	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "vdso", vdso_cpu_online, NULL);
 
 	return __vdso_init(VDSO_ABI_AA64);
 }

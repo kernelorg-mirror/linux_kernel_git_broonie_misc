@@ -55,6 +55,7 @@
 #include <asm/processor.h>
 #include <asm/pointer_auth.h>
 #include <asm/stacktrace.h>
+#include <asm/vdso/datapage.h>
 
 #if defined(CONFIG_STACKPROTECTOR) && !defined(CONFIG_STACKPROTECTOR_PER_TASK)
 #include <linux/stackprotector.h>
@@ -309,6 +310,28 @@ void show_regs(struct pt_regs * regs)
 	dump_backtrace(regs, NULL, KERN_DEFAULT);
 }
 
+void start_thread(struct pt_regs *regs, unsigned long pc, unsigned long sp)
+{
+	start_thread_common(regs, pc);
+	regs->pstate = PSR_MODE_EL0t;
+
+	if (arm64_get_ssbd_state() != ARM64_SSBD_FORCE_ENABLE)
+		set_ssbs_bit(regs);
+
+	regs->sp = sp;
+
+	/*
+	 * Store the vDSO per-CPU offset if supported. Disable
+	 * preemption to make sure we read the CPU offset on the CPU
+	 * we write it on.
+	 */
+	if (!arm64_kernel_unmapped_at_el0()) {
+		preempt_disable();
+		write_sysreg(vdso_cpu_offset(), tpidrro_el0);
+		preempt_enable();
+	}
+}
+
 static void tls_thread_flush(void)
 {
 	write_sysreg(0, tpidr_el0);
@@ -452,7 +475,8 @@ static void tls_thread_switch(struct task_struct *next)
 	if (is_compat_thread(task_thread_info(next)))
 		write_sysreg(next->thread.uw.tp_value, tpidrro_el0);
 	else if (!arm64_kernel_unmapped_at_el0())
-		write_sysreg(0, tpidrro_el0);
+		/* Used as scratch in KPTI trampoline so don't set here. */
+		write_sysreg(vdso_cpu_offset(), tpidrro_el0);
 
 	write_sysreg(*task_user_tls(next), tpidr_el0);
 }

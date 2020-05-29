@@ -28,6 +28,7 @@
 #include <asm/cacheflush.h>
 #include <asm/signal32.h>
 #include <asm/vdso.h>
+#include <asm/vdso/datapage.h>
 
 extern char vdso_start[], vdso_end[];
 #ifdef CONFIG_COMPAT_VDSO
@@ -77,10 +78,10 @@ static struct vdso_abi_info vdso_info[] __ro_after_init = {
  * The vDSO data page.
  */
 static union {
-	struct vdso_data	data[CS_BASES];
+	struct arm64_vdso_data	data;
 	u8			page[PAGE_SIZE];
 } vdso_data_store __page_aligned_data;
-struct vdso_data *vdso_data = vdso_data_store.data;
+struct vdso_data *vdso_data = vdso_data_store.data.data;
 
 static int __vdso_remap(enum vdso_abi abi,
 			const struct vm_special_mapping *sm,

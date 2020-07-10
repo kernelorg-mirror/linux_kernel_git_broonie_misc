@@ -14,6 +14,7 @@
 #include <linux/stacktrace.h>
 
 #include <asm/irq.h>
+#include <asm/kprobes.h>
 #include <asm/pointer_auth.h>
 #include <asm/stack_pointer.h>
 #include <asm/stacktrace.h>
@@ -210,6 +211,47 @@ void arch_stack_walk(stack_trace_consume_fn consume_entry, void *cookie,
 				thread_saved_pc(task));
 
 	walk_stackframe(task, &frame, consume_entry, cookie);
+}
+
+/*
+ * This function returns an error if it detects any unreliable features of the
+ * stack.  Otherwise it guarantees that the stack trace is reliable.
+ *
+ * If the task is not 'current', the caller *must* ensure the task is inactive.
+ */
+int arch_stack_walk_reliable(stack_trace_consume_fn consume_entry,
+			     void *cookie, struct task_struct *task)
+{
+	struct stackframe frame;
+
+	if (task == current)
+		start_backtrace(&frame,
+				(unsigned long)__builtin_frame_address(0),
+				(unsigned long)arch_stack_walk_reliable);
+	else
+		start_backtrace(&frame, thread_saved_fp(task),
+				thread_saved_pc(task));
+
+	while (1) {
+		int ret;
+
+#ifdef CONFIG_KPROBES
+		/*
+		 * Mark stacktraces with kretprobed functions on them
+		 * as unreliable.
+		 */
+		if (frame.pc == (unsigned long)kretprobe_trampoline)
+			return -EINVAL;
+#endif
+
+		if (!consume_entry(cookie, frame.pc))
+			return -EINVAL;
+		ret = unwind_frame(task, &frame);
+		if (ret == -ENOENT)
+			return 0;
+		if (ret < 0)
+			return ret;
+	}
 }
 
 #endif

@@ -205,7 +205,9 @@ Before jumping into the kernel, the following conditions must be met:
   All writable architected system registers at or below the exception
   level where the kernel image will be entered must be initialised by
   software at a higher exception level to prevent execution in an UNKNOWN
-  state.
+  state.  Where these architected system registers have reset values
+  specified by the architecture they must be initialised to those values
+  unless specified more specifically.
 
   - SCR_EL3.FIQ must have the same value across all CPUs the kernel is
     executing on.

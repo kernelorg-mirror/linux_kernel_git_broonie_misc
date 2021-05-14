@@ -42,6 +42,10 @@
 	SYM_START(name, SYM_L_WEAK, SYM_A_NONE)		\
 	BTI_C
 
+#else
+
+#define BTI_C
+
 #endif
 
 /*

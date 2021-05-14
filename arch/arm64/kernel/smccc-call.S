@@ -7,8 +7,47 @@
 
 #include <asm/asm-offsets.h>
 #include <asm/assembler.h>
+#include <asm/thread_info.h>
+
+/*
+ * If we have SMCCC v1.3 and (as is likely) no SVE state in
+ * the registers then set the SMCCC hint bit to say there's no
+ * need to preserve it.  Do this by directly adjusting the SMCCC
+ * function value which is already stored in x0 ready to be called.
+ *
+ * Since we need scratch registers but wish to avoid having to handle
+ * the stack we expect the caller to preserve x15 and x16 if needed,
+ * the only callers are expected to be the call below and the inline
+ * asm in linux/arm-smccc.h for SMCCC 1.1 and later calls.
+ */
+SYM_CODE_START(__smccc_sve_check)
+	BTI_C
+
+alternative_if ARM64_SVE
+
+	adrp	x15, smccc_has_sve_hint
+	ldr	x15, [x15]
+	cbz	x15, 1f
+
+	get_current_task x15
+	ldr	x15, [x15, #TSK_TI_FLAGS]
+	and	x16, x15, #TIF_FOREIGN_FPSTATE	// Any live FP state?
+	cbnz	x16, 1f
+	mov	x16, #TIF_SVE			// Does that state include SVE?
+	and	x16, x15, x16
+	cbnz	x16, 2f
+
+1:	orr	x0, x0, ARM_SMCCC_1_3_SVE_HINT
+alternative_else_nop_endif
+
+2:	ret
+SYM_CODE_END(__smccc_sve_check)
+EXPORT_SYMBOL(__smccc_sve_check)
 
 	.macro SMCCC instr
+alternative_if ARM64_SVE
+	bl	__smccc_sve_check
+alternative_else_nop_endif
 	\instr	#0
 	ldr	x4, [sp]
 	stp	x0, x1, [x4, #ARM_SMCCC_RES_X0_OFFS]

@@ -742,7 +742,7 @@ asmlinkage void __sched arm64_preempt_schedule_irq(void)
 
 #ifdef CONFIG_BINFMT_ELF
 int arch_elf_adjust_prot(int prot, const struct arch_elf_state *state,
-			 bool has_interp, bool is_interp)
+			 bool is_interp)
 {
 	if (prot & PROT_EXEC) {
 		if (state->flags & ARM64_ELF_INTERP_BTI && is_interp)

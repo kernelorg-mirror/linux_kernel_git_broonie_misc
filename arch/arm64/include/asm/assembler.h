@@ -791,6 +791,24 @@ alternative_endif
 	.endm
 
 /*
+ * Branch Target Identifier (BTI)
+ */
+	.macro  bti, targets
+	.equ	.L__bti_targets_c, 1
+	.equ	.L__bti_targets_j, 2
+	.equ	.L__bti_targets_jc,3
+	.if	.L__bti_targets_\targets == .L__bti_targets_c
+	hint	#34
+	.elseif	.L__bti_targets_\targets == .L__bti_targets_j
+	hint	#36
+	.elseif	.L__bti_targets_\targets == .L__bti_targets_jc
+	hint	#38
+	.else
+	.error	"Unsupported BTI targets '\targets\()'"
+	.endif
+	.endm
+
+/*
  * This macro emits a program property note section identifying
  * architecture features which require special handling, mainly for
  * use in assembly files included in the VDSO.

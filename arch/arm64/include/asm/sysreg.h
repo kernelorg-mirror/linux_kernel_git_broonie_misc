@@ -15,6 +15,8 @@
 
 #include <asm/gpr-num.h>
 
+#define ARM64_SYSREG_BITMASK(h, l) ((BIT(ULL(h)) - BIT(ULL(l))) | BIT(ULL(h)))
+
 /*
  * ARMv8 ARM reserves the following encoding for system registers:
  * (Ref: ARMv8 ARM, Section: "System instruction class encoding overview",

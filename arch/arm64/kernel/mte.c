@@ -216,11 +216,11 @@ static void mte_update_sctlr_user(struct task_struct *task)
 	 * default order.
 	 */
 	if (resolved_mte_tcf & MTE_CTRL_TCF_ASYMM)
-		sctlr |= SCTLR_EL1_TCF0_ASYMM;
+		sctlr |= SCTLR_EL1_TCF0_ASYMM << SCTLR_EL1_TCF0_SHIFT;
 	else if (resolved_mte_tcf & MTE_CTRL_TCF_ASYNC)
-		sctlr |= SCTLR_EL1_TCF0_ASYNC;
+		sctlr |= SCTLR_EL1_TCF0_ASYNC << SCTLR_EL1_TCF0_SHIFT;
 	else if (resolved_mte_tcf & MTE_CTRL_TCF_SYNC)
-		sctlr |= SCTLR_EL1_TCF0_SYNC;
+		sctlr |= SCTLR_EL1_TCF0_SYNC << SCTLR_EL1_TCF0_SHIFT;
 	task->thread.sctlr_user = sctlr;
 }
 

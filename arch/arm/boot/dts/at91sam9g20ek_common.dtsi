@@ -214,6 +214,7 @@
 		24c512@50 {
 			compatible = "atmel,24c512";
 			reg = <0x50>;
+			vcc-supply = <&reg_3v3>;
 		};
 
 		wm8731: wm8731@1b {

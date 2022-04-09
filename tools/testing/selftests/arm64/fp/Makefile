@@ -14,16 +14,16 @@ TEST_PROGS_EXTENDED := fpsimd-stress sve-stress
 
 EXTRA_CLEAN += $(OUTPUT)/asm-utils.o $(OUTPUT)/rdvl.o
 
-fp-pidbench: fp-pidbench.S asm-utils.o
+$(OUTPUT)/fp-pidbench: fp-pidbench.S asm-utils.o
 	$(CC) -nostdlib $^ -o $@
-fpsimd-test: fpsimd-test.o asm-utils.o
+$(OUTPUT)/fpsimd-test: fpsimd-test.S asm-utils.o
 	$(CC) -nostdlib $^ -o $@
-rdvl-sve: rdvl-sve.o rdvl.o
-sve-ptrace: sve-ptrace.o
-sve-probe-vls: sve-probe-vls.o rdvl.o
-sve-test: sve-test.o asm-utils.o
+$(OUTPUT)/rdvl-sve: rdvl-sve.c rdvl.o
+$(OUTPUT)/sve-ptrace: sve-ptrace.c
+$(OUTPUT)/sve-probe-vls: sve-probe-vls.c rdvl.o
+$(OUTPUT)/sve-test: sve-test.S asm-utils.o
 	$(CC) -nostdlib $^ -o $@
-vec-syscfg: vec-syscfg.o rdvl.o
-vlset: vlset.o
+$(OUTPUT)/vec-syscfg: vec-syscfg.c rdvl.o
+$(OUTPUT)/vlset: vlset.c
 
 include ../../lib.mk

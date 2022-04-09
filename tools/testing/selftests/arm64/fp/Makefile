@@ -2,12 +2,11 @@
 
 CFLAGS += -I../../../../../usr/include/
 TEST_GEN_PROGS := sve-ptrace sve-probe-vls vec-syscfg
-TEST_PROGS_EXTENDED := fp-pidbench fpsimd-test fpsimd-stress \
+TEST_GEN_PROGS_EXTENDED := fp-pidbench fpsimd-test \
 	rdvl-sve \
-	sve-test sve-stress \
+	sve-test \
 	vlset
-
-all: $(TEST_GEN_PROGS) $(TEST_PROGS_EXTENDED)
+TEST_PROGS_EXTENDED := fpsimd-stress sve-stress
 
 fp-pidbench: fp-pidbench.S asm-utils.o
 	$(CC) -nostdlib $^ -o $@

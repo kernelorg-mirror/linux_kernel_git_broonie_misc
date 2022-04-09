@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0
 
-CFLAGS += -I../../../../../usr/include/
+# A proper top_srcdir is needed by KSFT(lib.mk)
+top_srcdir = $(realpath ../../../../../)
+
+CFLAGS += -I$(top_srcdir)/usr/include/
+
 TEST_GEN_PROGS := sve-ptrace sve-probe-vls vec-syscfg
 TEST_GEN_PROGS_EXTENDED := fp-pidbench fpsimd-test \
 	rdvl-sve \

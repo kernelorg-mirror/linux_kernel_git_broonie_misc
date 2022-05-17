@@ -212,6 +212,14 @@ Sysreg	SMCR_EL1	3	0	1	2	6
 Fields	SMCR_ELx
 EndSysreg
 
+Sysreg	CCSIDR_EL1	3	1	0	0	0
+Res0	63:56
+Field	55:32	NumSets
+Res0	31:24
+Field	23:3	Associativity
+Field	2:0	LineSize
+EndSysreg
+
 Sysreg	SMIDR_EL1	3	1	0	0	6
 Res0	63:32
 Field	31:24	IMPLEMENTER

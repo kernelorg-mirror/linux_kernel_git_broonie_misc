@@ -1219,6 +1219,7 @@
 
 #ifdef __ASSEMBLY__
 
+#ifndef LINKER_SCRIPT
 	.macro	mrs_s, rt, sreg
 	 __emit_inst(0xd5200000|(\sreg)|(.L__gpr_num_\rt))
 	.endm
@@ -1226,6 +1227,7 @@
 	.macro	msr_s, sreg, rt
 	__emit_inst(0xd5000000|(\sreg)|(.L__gpr_num_\rt))
 	.endm
+#endif /* !LINKER_SCRIPT */
 
 #else
 

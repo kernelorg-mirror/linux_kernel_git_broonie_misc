@@ -34,10 +34,10 @@ DEFINE_PER_CPU(struct cpuinfo_arm64, cpu_data);
 static struct cpuinfo_arm64 boot_cpu_data;
 
 static const char *icache_policy_str[] = {
-	[ICACHE_POLICY_VPIPT]		= "VPIPT",
-	[ICACHE_POLICY_AIVIVT]		= "AIVIVT",
-	[ICACHE_POLICY_VIPT]		= "VIPT",
-	[ICACHE_POLICY_PIPT]		= "PIPT",
+	[CTR_EL0_L1Ip_VPIPT]		= "VPIPT",
+	[CTR_EL0_L1Ip_AIVIVT]		= "AIVIVT",
+	[CTR_EL0_L1Ip_VIPT]		= "VIPT",
+	[CTR_EL0_L1Ip_PIPT]		= "PIPT",
 };
 
 unsigned long __icache_flags;
@@ -342,13 +342,13 @@ static void cpuinfo_detect_icache_policy(struct cpuinfo_arm64 *info)
 	u32 l1ip = CTR_L1IP(info->reg_ctr);
 
 	switch (l1ip) {
-	case ICACHE_POLICY_PIPT:
+	case CTR_EL0_L1Ip_PIPT:
 		break;
-	case ICACHE_POLICY_VPIPT:
+	case CTR_EL0_L1Ip_VPIPT:
 		set_bit(ICACHEF_VPIPT, &__icache_flags);
 		break;
-	case ICACHE_POLICY_AIVIVT:
-	case ICACHE_POLICY_VIPT:
+	case CTR_EL0_L1Ip_AIVIVT:
+	case CTR_EL0_L1Ip_VIPT:
 		/* Assume aliasing */
 		set_bit(ICACHEF_ALIASING, &__icache_flags);
 		break;

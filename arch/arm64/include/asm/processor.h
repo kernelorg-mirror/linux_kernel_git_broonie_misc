@@ -123,6 +123,7 @@ enum vec_type {
 };
 
 enum fp_state {
+	FP_STATE_TASK,		/* Save based on current, invalid as fp_type */
 	FP_STATE_FPSIMD,
 	FP_STATE_SVE,
 };

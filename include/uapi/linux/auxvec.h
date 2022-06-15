@@ -30,6 +30,7 @@
 				 * differ from AT_PLATFORM. */
 #define AT_RANDOM 25	/* address of 16 random bytes */
 #define AT_HWCAP2 26	/* extension of AT_HWCAP */
+#define AT_HWCAP3 27	/* further extension of AT_HWCAP */
 
 #define AT_EXECFN  31	/* filename of program */
 

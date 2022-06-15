@@ -89,4 +89,8 @@
 #define HWCAP2_SME_FA64		(1 << 30)
 #define HWCAP2_WFXT		(1UL << 31)
 
+/*
+ * HWCAP3 flags - for AT_HWCAP3
+ */
+
 #endif /* _UAPI__ASM_HWCAP_H */

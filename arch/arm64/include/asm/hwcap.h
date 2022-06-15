@@ -44,10 +44,11 @@
 #define KHWCAP_OFFSET(n)		((n - 1) * CPU_FEATURES_PER_HWCAP)
 
 /*
- * For userspace we represent hwcaps as a collection of HWCAP{,2}_x bitfields
- * as described in uapi/asm/hwcap.h. For the kernel we represent hwcaps as
- * natural numbers (in a single range of size MAX_CPU_FEATURES) defined here
- * with prefix KERNEL_HWCAP_ mapped to their HWCAP{,2}_x counterpart.
+ * For userspace we represent hwcaps as a collection of HWCAP{,[23]}_x
+ * bitfields as described in uapi/asm/hwcap.h. For the kernel we
+ * represent hwcaps as natural numbers (in a single range of size
+ * MAX_CPU_FEATURES) defined here with prefix KERNEL_HWCAP_ mapped to
+ * their HWCAP{,2}_x counterpart.
  *
  * Hwcaps should be set and tested within the kernel via the
  * cpu_{set,have}_named_feature(feature) where feature is the unique suffix
@@ -121,12 +122,15 @@
 #define KERNEL_HWCAP_SME_FA64		__khwcap2_feature(SME_FA64)
 #define KERNEL_HWCAP_WFXT		__khwcap2_feature(WFXT)
 
+#define __khwcap3_feature(x)		(const_ilog2(HWCAP3_ ## x) + KHWCAP_OFFSET(3))
+
 /*
  * This yields a mask that user programs can use to figure out what
  * instruction set this cpu supports.
  */
 #define ELF_HWCAP		cpu_get_elf_hwcap()
 #define ELF_HWCAP2		cpu_get_elf_hwcap2()
+#define ELF_HWCAP3		cpu_get_elf_hwcap3()
 
 #ifdef CONFIG_COMPAT
 #define COMPAT_ELF_HWCAP	(compat_elf_hwcap)

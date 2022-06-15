@@ -3141,6 +3141,11 @@ unsigned long cpu_get_elf_hwcap2(void)
 	return elf_hwcap[1];
 }
 
+unsigned long cpu_get_elf_hwcap3(void)
+{
+	return elf_hwcap[2];
+}
+
 static void __init setup_system_capabilities(void)
 {
 	/*

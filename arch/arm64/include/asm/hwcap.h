@@ -123,6 +123,7 @@
 #define KERNEL_HWCAP_WFXT		__khwcap2_feature(WFXT)
 
 #define __khwcap3_feature(x)		(const_ilog2(HWCAP3_ ## x) + KHWCAP_OFFSET(3))
+#define KERNEL_HWCAP_EBF16		__khwcap3_feature(EBF16)
 
 /*
  * This yields a mask that user programs can use to figure out what

@@ -11,6 +11,12 @@
 #include <asm/hwcap.h>
 #include <asm/sysreg.h>
 
+/*
+ * To support potential future 32 bit only ABIs and/or libc usage we
+ * currently only allocate the bottom 32 bits. Bits 62 and 63 of
+ * AT_HWCAP are reserved for glibc.
+ */
+#define CPU_FEATURES_PER_HWCAP	32
 #define MAX_CPU_FEATURES	64
 #define cpu_feature(x)		KERNEL_HWCAP_ ## x
 

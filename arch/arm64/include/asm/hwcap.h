@@ -41,6 +41,8 @@
 #ifndef __ASSEMBLY__
 #include <linux/log2.h>
 
+#define KHWCAP_OFFSET(n)		((n - 1) * CPU_FEATURES_PER_HWCAP)
+
 /*
  * For userspace we represent hwcaps as a collection of HWCAP{,2}_x bitfields
  * as described in uapi/asm/hwcap.h. For the kernel we represent hwcaps as
@@ -85,7 +87,7 @@
 #define KERNEL_HWCAP_PACA		__khwcap_feature(PACA)
 #define KERNEL_HWCAP_PACG		__khwcap_feature(PACG)
 
-#define __khwcap2_feature(x)		(const_ilog2(HWCAP2_ ## x) + 32)
+#define __khwcap2_feature(x)		(const_ilog2(HWCAP2_ ## x) + KHWCAP_OFFSET(2))
 #define KERNEL_HWCAP_DCPODP		__khwcap2_feature(DCPODP)
 #define KERNEL_HWCAP_SVE2		__khwcap2_feature(SVE2)
 #define KERNEL_HWCAP_SVEAES		__khwcap2_feature(SVEAES)

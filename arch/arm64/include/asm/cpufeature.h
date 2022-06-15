@@ -11,6 +11,8 @@
 #include <asm/hwcap.h>
 #include <asm/sysreg.h>
 
+/* Note that bits 62 and 63 of each AT_HWCAP are reserved */
+#define CPU_FEATURES_PER_HWCAP	32
 #define MAX_CPU_FEATURES	64
 #define cpu_feature(x)		KERNEL_HWCAP_ ## x
 

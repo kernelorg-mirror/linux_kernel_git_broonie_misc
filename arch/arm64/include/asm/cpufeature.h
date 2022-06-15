@@ -17,7 +17,7 @@
  * AT_HWCAP are reserved for glibc.
  */
 #define CPU_FEATURES_PER_HWCAP	32
-#define MAX_CPU_FEATURES	64
+#define MAX_CPU_FEATURES	96
 #define cpu_feature(x)		KERNEL_HWCAP_ ## x
 
 #ifndef __ASSEMBLY__
@@ -440,6 +440,7 @@ void cpu_set_feature(unsigned int num);
 bool cpu_have_feature(unsigned int num);
 unsigned long cpu_get_elf_hwcap(void);
 unsigned long cpu_get_elf_hwcap2(void);
+unsigned long cpu_get_elf_hwcap3(void);
 
 #define cpu_set_named_feature(name) cpu_set_feature(cpu_feature(name))
 #define cpu_have_named_feature(name) cpu_have_feature(cpu_feature(name))

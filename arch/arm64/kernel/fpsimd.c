@@ -396,7 +396,8 @@ static void task_fpsimd_load(void)
 		write_sysreg_s(current->thread.svcr, SYS_SVCR);
 
 		if (thread_za_enabled(&current->thread))
-			za_load_state(current->thread.sme_state);
+			sme_load_state(current->thread.sme_state,
+				       system_supports_sme2());
 
 		if (thread_sm_enabled(&current->thread)) {
 			restore_sve_regs = true;
@@ -449,7 +450,8 @@ static void fpsimd_save(void)
 		*svcr = read_sysreg_s(SYS_SVCR);
 
 		if (*svcr & SVCR_ZA_MASK)
-			za_save_state(last->sme_state);
+			sme_save_state(last->sme_state,
+				       system_supports_sme2());
 
 		/* If we are in streaming mode override regular SVE. */
 		if (*svcr & SVCR_SM_MASK) {

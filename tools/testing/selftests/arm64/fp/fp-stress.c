@@ -350,6 +350,19 @@ static void start_za(struct child_data *child, int vl, int cpu)
 	ksft_print_msg("Started %s\n", child->name);
 }
 
+static void start_zt(struct child_data *child, int cpu)
+{
+	int ret;
+
+	child_start(child, "./zt-test");
+
+	ret = asprintf(&child->name, "ZT-%d", cpu);
+	if (ret == -1)
+		ksft_exit_fail_msg("asprintf() failed\n");
+
+	ksft_print_msg("Started %s\n", child->name);
+}
+
 static void probe_vls(int vls[], int *vl_count, int set_vl)
 {
 	unsigned int vq;
@@ -404,6 +417,7 @@ int main(int argc, char **argv)
 	int cpus, tests, i, j, c;
 	int sve_vl_count, sme_vl_count, fpsimd_per_cpu;
 	int sve_vls[MAX_VLS], sme_vls[MAX_VLS];
+	bool have_sme2;
 	struct epoll_event ev;
 	struct sigaction sa;
 
@@ -437,6 +451,13 @@ int main(int argc, char **argv)
 		sme_vl_count = 0;
 	}
 
+	if (getauxval(AT_HWCAP2) & HWCAP2_SME2) {
+		tests += cpus;
+		have_sme2 = true;
+	} else {
+		have_sme2 = false;
+	}
+
 	/* Force context switching if we only have FPSIMD */
 	if (!sve_vl_count && !sme_vl_count)
 		fpsimd_per_cpu = 2;
@@ -447,8 +468,9 @@ int main(int argc, char **argv)
 	ksft_print_header();
 	ksft_set_plan(tests);
 
-	ksft_print_msg("%d CPUs, %d SVE VLs, %d SME VLs\n",
-		       cpus, sve_vl_count, sme_vl_count);
+	ksft_print_msg("%d CPUs, %d SVE VLs, %d SME VLs, SME2 %s\n",
+		       cpus, sve_vl_count, sme_vl_count,
+		       have_sme2 ? "present" : "absent");
 
 	if (timeout > 0)
 		ksft_print_msg("Will run for %ds\n", timeout);
@@ -495,6 +517,9 @@ int main(int argc, char **argv)
 			start_ssve(&children[num_children++], sme_vls[j], i);
 			start_za(&children[num_children++], sme_vls[j], i);
 		}
+
+		if (have_sme2)
+			start_zt(&children[num_children++], i);
 	}
 
 	for (;;) {

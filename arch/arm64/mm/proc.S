@@ -190,6 +190,7 @@ SYM_FUNC_END(cpu_do_resume)
  */
 SYM_TYPED_FUNC_START(idmap_cpu_replace_ttbr1)
 	save_and_disable_daif flags=x2
+	disable_allint
 
 	__idmap_cpu_set_reserved_ttbr1 x1, x3
 
@@ -197,6 +198,7 @@ SYM_TYPED_FUNC_START(idmap_cpu_replace_ttbr1)
 	msr	ttbr1_el1, x0
 	isb
 
+	enable_allint
 	restore_daif x2
 
 	ret

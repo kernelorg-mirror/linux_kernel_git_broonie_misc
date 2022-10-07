@@ -90,6 +90,22 @@
 9990:
 	.endm
 
+	.macro	disable_allint
+#ifdef CONFIG_ARM64_NMI
+alternative_if ARM64_HAS_NMI
+	msr_s	SYS_ALLINT_SET, xzr
+alternative_else_nop_endif
+#endif
+	.endm
+
+	.macro	enable_allint
+#ifdef CONFIG_ARM64_NMI
+alternative_if ARM64_HAS_NMI
+	msr_s	SYS_ALLINT_CLR, xzr
+alternative_else_nop_endif
+#endif
+	.endm
+
 /*
  * RAS Error Synchronization barrier
  */

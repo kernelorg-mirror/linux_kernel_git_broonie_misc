@@ -21,6 +21,7 @@
 #include <asm/irq_regs.h>
 #include <asm/kprobes.h>
 #include <asm/mmu.h>
+#include <asm/nmi.h>
 #include <asm/processor.h>
 #include <asm/sdei.h>
 #include <asm/stacktrace.h>
@@ -294,6 +295,8 @@ static void noinstr __panic_unhandled(struct pt_regs *regs, const char *vector,
 
 	__show_regs(regs);
 	panic("Unhandled exception");
+
+	nmi_unmask();
 }
 
 #define UNHANDLED(el, regsize, vector)							\
@@ -420,6 +423,8 @@ asmlinkage void noinstr el1h_64_sync_handler(struct pt_regs *regs)
 {
 	unsigned long esr = read_sysreg(esr_el1);
 
+	nmi_unmask();
+
 	switch (ESR_ELx_EC(esr)) {
 	case ESR_ELx_EC_DABT_CUR:
 	case ESR_ELx_EC_IABT_CUR:
@@ -477,6 +482,7 @@ static __always_inline void __el1_irq(struct pt_regs *regs,
 static void noinstr el1_interrupt(struct pt_regs *regs,
 				  void (*handler)(struct pt_regs *))
 {
+	nmi_unmask();
 	write_sysreg(DAIF_PROCCTX_NOIRQ, daif);
 
 	if (IS_ENABLED(CONFIG_ARM64_PSEUDO_NMI) && !interrupts_enabled(regs))
@@ -499,6 +505,7 @@ asmlinkage void noinstr el1h_64_error_handler(struct pt_regs *regs)
 {
 	unsigned long esr = read_sysreg(esr_el1);
 
+	nmi_unmask();
 	local_daif_restore(DAIF_ERRCTX);
 	arm64_enter_nmi(regs);
 	do_serror(regs, esr);
@@ -649,6 +656,8 @@ asmlinkage void noinstr el0t_64_sync_handler(struct pt_regs *regs)
 {
 	unsigned long esr = read_sysreg(esr_el1);
 
+	nmi_unmask();
+
 	switch (ESR_ELx_EC(esr)) {
 	case ESR_ELx_EC_SVC64:
 		el0_svc(regs);
@@ -706,6 +715,7 @@ static void noinstr el0_interrupt(struct pt_regs *regs,
 {
 	enter_from_user_mode(regs);
 
+	nmi_unmask();
 	write_sysreg(DAIF_PROCCTX_NOIRQ, daif);
 
 	if (regs->pc & BIT(55))
@@ -742,6 +752,7 @@ static void noinstr __el0_error_handler_common(struct pt_regs *regs)
 {
 	unsigned long esr = read_sysreg(esr_el1);
 
+	nmi_unmask();
 	enter_from_user_mode(regs);
 	local_daif_restore(DAIF_ERRCTX);
 	arm64_enter_nmi(regs);
@@ -776,6 +787,8 @@ static void noinstr el0_svc_compat(struct pt_regs *regs)
 asmlinkage void noinstr el0t_32_sync_handler(struct pt_regs *regs)
 {
 	unsigned long esr = read_sysreg(esr_el1);
+
+	nmi_unmask();
 
 	switch (ESR_ELx_EC(esr)) {
 	case ESR_ELx_EC_SVC32:

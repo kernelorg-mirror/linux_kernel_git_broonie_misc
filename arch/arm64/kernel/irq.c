@@ -85,6 +85,16 @@ void do_softirq_own_stack(void)
 }
 #endif
 
+static void default_handle_nmi_irq(struct pt_regs *regs)
+{
+	panic("Superpriority IRQ taken without a root NMI IRQ handler\n");
+}
+
+static void default_handle_nmi_fiq(struct pt_regs *regs)
+{
+	panic("Superpriority FIQ taken without a root NMI FIQ handler\n");
+}
+
 static void default_handle_irq(struct pt_regs *regs)
 {
 	panic("IRQ taken without a root IRQ handler\n");
@@ -95,8 +105,30 @@ static void default_handle_fiq(struct pt_regs *regs)
 	panic("FIQ taken without a root FIQ handler\n");
 }
 
+void (*handle_arch_nmi_irq)(struct pt_regs *) __ro_after_init = default_handle_nmi_irq;
+void (*handle_arch_nmi_fiq)(struct pt_regs *) __ro_after_init = default_handle_nmi_fiq;
 void (*handle_arch_irq)(struct pt_regs *) __ro_after_init = default_handle_irq;
 void (*handle_arch_fiq)(struct pt_regs *) __ro_after_init = default_handle_fiq;
+
+int __init set_handle_nmi_irq(void (*handle_nmi_irq)(struct pt_regs *))
+{
+	if (handle_arch_nmi_irq != default_handle_nmi_irq)
+		return -EBUSY;
+
+	handle_arch_nmi_irq = handle_nmi_irq;
+	pr_info("Root superpriority IRQ handler: %ps\n", handle_nmi_irq);
+	return 0;
+}
+
+int __init set_handle_nmi_fiq(void (*handle_nmi_fiq)(struct pt_regs *))
+{
+	if (handle_arch_nmi_fiq != default_handle_nmi_fiq)
+		return -EBUSY;
+
+	handle_arch_nmi_fiq = handle_nmi_fiq;
+	pr_info("Root superpriority FIQ handler: %ps\n", handle_nmi_fiq);
+	return 0;
+}
 
 int __init set_handle_irq(void (*handle_irq)(struct pt_regs *))
 {

@@ -20,6 +20,7 @@
 #include <asm/memory.h>
 #include <asm/mmu.h>
 #include <asm/mmu_context.h>
+#include <asm/nmi.h>
 #include <asm/page.h>
 #include <asm/sections.h>
 #include <asm/trans_pgd.h>
@@ -190,6 +191,7 @@ void machine_kexec(struct kimage *kimage)
 	pr_info("Bye!\n");
 
 	local_daif_mask();
+	nmi_mask();
 
 	/*
 	 * Both restart and kernel_reloc will shutdown the MMU, disable data

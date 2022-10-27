@@ -63,9 +63,19 @@ static void __activate_traps(struct kvm_vcpu *vcpu)
 		__activate_traps_fpsimd32(vcpu);
 	}
 
-	if (cpus_have_final_cap(ARM64_SME))
+	if (cpus_have_final_cap(ARM64_SME)) {
 		write_sysreg(read_sysreg(sctlr_el2) & ~SCTLR_ELx_ENTP2,
 			     sctlr_el2);
+
+		sysreg_clear_set_s(SYS_HFGRTR_EL2,
+				   HFGxTR_EL2_nSMPRI_EL1_MASK |
+				   HFGxTR_EL2_nTPIDR2_EL0_MASK,
+				   0);
+		sysreg_clear_set_s(SYS_HFGWTR_EL2,
+				   HFGxTR_EL2_nSMPRI_EL1_MASK |
+				   HFGxTR_EL2_nTPIDR2_EL0_MASK,
+				   0);
+	}
 
 	write_sysreg(val, cpacr_el1);
 
@@ -88,9 +98,21 @@ static void __deactivate_traps(struct kvm_vcpu *vcpu)
 	 */
 	asm(ALTERNATIVE("nop", "isb", ARM64_WORKAROUND_SPECULATIVE_AT));
 
-	if (cpus_have_final_cap(ARM64_SME))
+	if (cpus_have_final_cap(ARM64_SME)) {
+		/*
+		 * Enable access to SMPRI_EL1 - we don't need to
+		 * control nTPIDR2_EL0 in VHE mode.
+		 */
+		sysreg_clear_set_s(SYS_HFGRTR_EL2, 0,
+				   HFGxTR_EL2_nSMPRI_EL1_MASK |
+				   HFGxTR_EL2_nTPIDR2_EL0_MASK);
+		sysreg_clear_set_s(SYS_HFGWTR_EL2, 0,
+				   HFGxTR_EL2_nSMPRI_EL1_MASK |
+				   HFGxTR_EL2_nTPIDR2_EL0_MASK);
+
 		write_sysreg(read_sysreg(sctlr_el2) | SCTLR_ELx_ENTP2,
 			     sctlr_el2);
+	}
 
 	write_sysreg(CPACR_EL1_DEFAULT, cpacr_el1);
 

@@ -2183,6 +2183,21 @@ int kvm_arch_init(void *opaque)
 		return -ENODEV;
 	}
 
+	/*
+	 * SME without fine grained traps is an architecturally
+	 * invalid configuration since SME is a v9.2 feature and FGT
+	 * is required from v8.6 but virtual platforms have been
+	 * encountered which don't respect this. Without FGT we can't
+	 * trap access to TPIDR2_EL0 in nVHE mode or SMPRI_EL1 in any
+	 * mode, making this conditional in the code would lead to
+	 * side channels on these out of spec systems.
+	 */
+	if (cpus_have_final_cap(ARM64_SME) &&
+	    !cpus_have_final_cap(ARM64_HAS_FGT)) {
+		kvm_err("KVM disabled since system has SME without FGT\n");
+		return -ENODEV;
+	}
+
 	if (kvm_get_mode() == KVM_MODE_NONE) {
 		kvm_info("KVM disabled from command line\n");
 		return -ENODEV;

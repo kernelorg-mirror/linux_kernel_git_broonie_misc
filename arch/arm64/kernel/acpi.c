@@ -31,6 +31,7 @@
 #include <asm/cputype.h>
 #include <asm/cpu_ops.h>
 #include <asm/daifflags.h>
+#include <asm/nmi.h>
 #include <asm/smp_plat.h>
 
 int acpi_noirq = 1;		/* skip ACPI IRQ initialization */
@@ -378,13 +379,16 @@ int apei_claim_sea(struct pt_regs *regs)
 		return_to_irqs_enabled = interrupts_enabled(regs);
 
 	/*
-	 * SEA can interrupt SError, mask it and describe this as an NMI so
-	 * that APEI defers the handling.
+	 * SEA can interrupt SError, mask it and describe this as a NMI so
+	 * that APEI defers the handling.  Since we are describing this as
+	 * a NMI also ensure that any actual NMIs are masked while doing so.
 	 */
+	nmi_mask();
 	local_daif_restore(DAIF_ERRCTX);
 	nmi_enter();
 	err = ghes_notify_sea();
 	nmi_exit();
+	nmi_unmask();
 
 	/*
 	 * APEI NMI-like notifications are deferred to irq_work. Unless

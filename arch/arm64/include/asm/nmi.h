@@ -10,9 +10,21 @@ static __always_inline void _allint_clear(void)
 	asm volatile(__msr_s(SYS_ALLINT_CLR, "xzr"));
 }
 
+static __always_inline void nmi_unmask(void)
+{
+	if (system_uses_nmi())
+		_allint_clear();
+}
+
 static __always_inline void _allint_set(void)
 {
 	asm volatile(__msr_s(SYS_ALLINT_SET, "xzr"));
+}
+
+static __always_inline void nmi_mask(void)
+{
+	if (system_uses_nmi())
+		_allint_set();
 }
 
 #endif

@@ -26,6 +26,7 @@
 #include <asm/memory.h>
 #include <asm/mmu_context.h>
 #include <asm/mte.h>
+#include <asm/nmi.h>
 #include <asm/sections.h>
 #include <asm/smp.h>
 #include <asm/smp_plat.h>
@@ -338,6 +339,14 @@ int swsusp_arch_suspend(void)
 
 	flags = local_daif_save();
 
+	/*
+	 * Disable NMIs in SCTLR rather than masking ALLINT so we
+	 * don't have to worry about the state of the FEAT_NMI
+	 * specific register in the asm code.
+	 */
+	if (system_uses_nmi())
+		sysreg_clear_set(sctlr_el1, SCTLR_EL1_NMI, 0);
+
 	if (__cpu_suspend_enter(&state)) {
 		/* make the crash dump kernel image visible/saveable */
 		crash_prepare_suspend();
@@ -385,6 +394,9 @@ int swsusp_arch_suspend(void)
 		 */
 		spectre_v4_enable_mitigation(NULL);
 	}
+
+	if (system_uses_nmi())
+		sysreg_clear_set(sctlr_el1, 0, SCTLR_EL1_NMI);
 
 	local_daif_restore(flags);
 

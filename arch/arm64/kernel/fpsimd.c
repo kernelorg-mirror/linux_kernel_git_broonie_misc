@@ -1923,6 +1923,53 @@ void kernel_neon_end(void)
 }
 EXPORT_SYMBOL_GPL(kernel_neon_end);
 
+/**
+ * kernel_fp_begin(): obtain the CPU floating point registers for use
+ * by the calling context
+ *
+ * @flags: KERNEL_FP_ flags specifying which FP features will be used.
+ *
+ * The caller is responsible for ensuring that the requested floating
+ * point features are available on the current system.  Task context
+ * in the registers is saved back to memory as necessary.  If SVE or
+ * SME support is enabled then the maximum available vector length
+ * will be selected.
+ *
+ * A matching call to kernel_fp_end() must be made before returning from the
+ * calling context.
+ *
+ * The caller may freely use the floating point registers until
+ * kernel_fp_end() is called.
+ */
+void kernel_fp_begin(unsigned int flags)
+{
+	kernel_neon_begin();
+
+	if (system_supports_sve() && (flags & KERNEL_FP_SVE))
+		sve_set_vq(sve_vq_from_vl(sve_max_vl()) - 1);
+
+#ifdef CONFIG_ARM64_SME
+	if (system_supports_sme() && (flags & KERNEL_FP_SME))
+		sme_set_vq(sve_vq_from_vl(sme_max_vl()) - 1);
+#endif
+}
+EXPORT_SYMBOL_GPL(kernel_fp_begin);
+
+/**
+ * kernel_fp_end(): end kernel usage of the floating point registers
+ *
+ * Must be called from a context in which kernel_fp_begin() was previously
+ * called, with no call to kernel_fp_end() in the meantime.
+ *
+ * The caller must not use the FPSIMD registers after this function is called,
+ * unless kernel_fp_begin() is called again in the meantime.
+ */
+void kernel_fp_end(void)
+{
+	kernel_neon_end();
+}
+EXPORT_SYMBOL_GPL(kernel_fp_end);
+
 #ifdef CONFIG_EFI
 
 static DEFINE_PER_CPU(struct user_fpsimd_state, efi_fpsimd_state);

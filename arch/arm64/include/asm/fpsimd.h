@@ -44,6 +44,13 @@
  */
 #define SME_VQ_MAX	16
 
+#define KERNEL_FP_FPSIMD	1
+#define KERNEL_FP_SVE		2
+#define KERNEL_FP_SME		4
+
+void kernel_fp_begin(unsigned int flags);
+void kernel_fp_end(void);
+
 struct task_struct;
 
 extern void fpsimd_save_state(struct user_fpsimd_state *state);

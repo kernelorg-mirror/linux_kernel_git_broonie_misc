@@ -106,6 +106,14 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	flags = local_daif_save();
 
 	/*
+	 * Disable NMIs in SCTLR rather than masking ALLINT so we
+	 * don't have to worry about the state of the FEAT_NMI
+	 * specific register in the asm code.
+	 */
+	if (system_uses_nmi())
+		sysreg_clear_set(sctlr_el1, SCTLR_EL1_NMI, 0);
+
+	/*
 	 * Function graph tracer state gets inconsistent when the kernel
 	 * calls functions that never return (aka suspend finishers) hence
 	 * disable graph tracing during their execution.
@@ -138,6 +146,9 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 	arm_cpuidle_restore_irq_context(&context);
 
 	unpause_graph_tracing();
+
+	if (system_uses_nmi())
+		sysreg_clear_set(sctlr_el1, 0, SCTLR_EL1_NMI);
 
 	/*
 	 * Restore pstate flags. OS lock and mdscr have been already

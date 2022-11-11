@@ -10,6 +10,7 @@
 #include <asm/arch_gicv3.h>
 #include <asm/barrier.h>
 #include <asm/cpufeature.h>
+#include <asm/nmi.h>
 #include <asm/ptrace.h>
 
 #define DAIF_PROCCTX		0
@@ -35,6 +36,9 @@ static inline void local_daif_mask(void)
 	if (system_uses_irq_prio_masking())
 		gic_write_pmr(GIC_PRIO_IRQON | GIC_PRIO_PSR_I_SET);
 
+	if (system_uses_nmi())
+		_allint_set();
+
 	trace_hardirqs_off();
 }
 
@@ -47,6 +51,12 @@ static inline unsigned long local_daif_save_flags(void)
 	if (system_uses_irq_prio_masking()) {
 		/* If IRQs are masked with PMR, reflect it in the flags */
 		if (read_sysreg_s(SYS_ICC_PMR_EL1) != GIC_PRIO_IRQON)
+			flags |= PSR_I_BIT | PSR_F_BIT;
+	}
+
+	if (system_uses_nmi()) {
+		/* If IRQs are masked with ALLINT, reflect in in the flags */
+		if (read_sysreg_s(SYS_ALLINT) & ALLINT_ALLINT)
 			flags |= PSR_I_BIT | PSR_F_BIT;
 	}
 
@@ -114,6 +124,10 @@ static inline void local_daif_restore(unsigned long flags)
 		gic_write_pmr(pmr);
 	}
 
+	/* If we can take asynchronous errors we can take NMIs */
+	if (system_uses_nmi() && !(flags & PSR_A_BIT))
+		_allint_clear();
+
 	write_sysreg(flags, daif);
 
 	if (irq_disabled)
@@ -130,6 +144,10 @@ static inline void local_daif_inherit(struct pt_regs *regs)
 
 	if (interrupts_enabled(regs))
 		trace_hardirqs_on();
+
+	/* If we can take asynchronous errors we can take NMIs */
+	if (system_uses_nmi() && !(flags & PSR_A_BIT))
+		_allint_clear();
 
 	if (system_uses_irq_prio_masking())
 		gic_write_pmr(regs->pmr_save);

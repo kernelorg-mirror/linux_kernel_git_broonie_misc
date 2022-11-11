@@ -52,19 +52,30 @@ alternative_else_nop_endif
 
 	.macro save_and_disable_daif, flags
 	mrs	\flags, daif
+        disable_allint
 	msr	daifset, #0xf
 	.endm
 
 	.macro disable_daif
+        disable_allint
 	msr	daifset, #0xf
 	.endm
 
 	.macro enable_daif
 	msr	daifclr, #0xf
+	enable_allint
 	.endm
 
 	.macro	restore_daif, flags:req
 	msr	daif, \flags
+#ifdef CONFIG_ARM64_NMI
+alternative_if ARM64_HAS_NMI
+	/* If async exceptions are unmasked we can take NMIs */
+	tbnz	\flags, #8, 2004f
+	msr_s	SYS_ALLINT_CLR, xzr
+2004:
+alternative_else_nop_endif
+#endif
 	.endm
 
 	/* IRQ/FIQ are the lowest priority flags, unconditionally unmask the rest. */

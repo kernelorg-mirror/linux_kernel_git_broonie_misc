@@ -263,7 +263,7 @@ static inline void arch_thread_struct_whitelist(unsigned long *offset,
 #define task_user_tls(t)	(&(t)->thread.uw.tp_value)
 #endif
 
-/* Sync TPIDR_EL0 back to thread_struct for current */
+/* Sync TPIDR_EL0 and TPIDR2_EL0 back to thread_struct for current */
 void tls_preserve_current_state(void);
 
 #define INIT_THREAD {				\

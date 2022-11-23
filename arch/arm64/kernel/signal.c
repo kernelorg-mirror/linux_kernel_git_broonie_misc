@@ -170,8 +170,11 @@ static void __user *apply_user_offset(
 
 struct user_ctxs {
 	struct fpsimd_context __user *fpsimd;
+	u32 fpsimd_size;
 	struct sve_context __user *sve;
+	u32 sve_size;
 	struct za_context __user *za;
+	u32 za_size;
 };
 
 static int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
@@ -195,14 +198,10 @@ static int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
 static int restore_fpsimd_context(struct user_ctxs *user)
 {
 	struct user_fpsimd_state fpsimd;
-	__u32 size;
 	int err = 0;
 
 	/* check the size information */
-	__get_user_error(size, &user->fpsimd->head.size, err);
-	if (err)
-		return -EFAULT;
-	if (size != sizeof(struct fpsimd_context))
+	if (user->fpsimd_size != sizeof(struct fpsimd_context))
 		return -EINVAL;
 
 	/* copy the FP and status/control registers */
@@ -270,7 +269,7 @@ static int restore_sve_fpsimd_context(struct user_ctxs *user)
 	struct user_fpsimd_state fpsimd;
 	struct sve_context sve;
 
-	if (sve.head.size < sizeof(*user->sve))
+	if (user->sve_size < sizeof(*user->sve))
 		return -EINVAL;
 
 	if (__copy_from_user(&sve, user->sve, sizeof(sve)))
@@ -291,7 +290,7 @@ static int restore_sve_fpsimd_context(struct user_ctxs *user)
 	if (sve.vl != vl)
 		return -EINVAL;
 
-	if (sve.head.size == sizeof(*user->sve)) {
+	if (user->sve_size == sizeof(*user->sve)) {
 		clear_thread_flag(TIF_SVE);
 		current->thread.svcr &= ~SVCR_SM_MASK;
 		goto fpsimd_only;
@@ -299,7 +298,7 @@ static int restore_sve_fpsimd_context(struct user_ctxs *user)
 
 	vq = sve_vq_from_vl(sve.vl);
 
-	if (sve.head.size < SVE_SIG_CONTEXT_SIZE(vq))
+	if (user->sve_size < SVE_SIG_CONTEXT_SIZE(vq))
 		return -EINVAL;
 
 	/*
@@ -401,7 +400,7 @@ static int restore_za_context(struct user_ctxs *user)
 	unsigned int vq;
 	struct za_context za;
 
-	if (za.head.size == sizeof(*user->za))
+	if (user->za_size < sizeof(*user->za))
 		return -EINVAL;
 
 	if (__copy_from_user(&za, user->za, sizeof(za)))
@@ -410,14 +409,14 @@ static int restore_za_context(struct user_ctxs *user)
 	if (za.vl != task_get_sme_vl(current))
 		return -EINVAL;
 
-	if (za.head.size == sizeof(*user->za)) {
+	if (user->za_size == sizeof(*user->za)) {
 		current->thread.svcr &= ~SVCR_ZA_MASK;
 		return 0;
 	}
 
 	vq = sve_vq_from_vl(za.vl);
 
-	if (za.head.size < ZA_SIG_CONTEXT_SIZE(vq))
+	if (user->za_size < ZA_SIG_CONTEXT_SIZE(vq))
 		return -EINVAL;
 
 	/*
@@ -514,6 +513,7 @@ static int parse_user_sigframe(struct user_ctxs *user,
 				goto invalid;
 
 			user->fpsimd = (struct fpsimd_context __user *)head;
+			user->fpsimd_size = size;
 			break;
 
 		case ESR_MAGIC:
@@ -528,6 +528,7 @@ static int parse_user_sigframe(struct user_ctxs *user,
 				goto invalid;
 
 			user->sve = (struct sve_context __user *)head;
+			user->sve_size = size;
 			break;
 
 		case ZA_MAGIC:
@@ -538,6 +539,7 @@ static int parse_user_sigframe(struct user_ctxs *user,
 				goto invalid;
 
 			user->za = (struct za_context __user *)head;
+			user->za_size = size;
 			break;
 
 		case EXTRA_MAGIC:

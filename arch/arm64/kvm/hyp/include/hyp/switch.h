@@ -158,6 +158,27 @@ static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
 	write_sysreg_el1(__vcpu_sys_reg(vcpu, ZCR_EL1), SYS_ZCR);
 }
 
+static inline void __hyp_sme_restore_guest(struct kvm_vcpu *vcpu)
+{
+	if (!system_supports_sme())
+		return;
+
+	/*
+	 * No guest support yet, always disable SME and reenable
+	 * traps.
+	 */
+	sme_smstop();
+
+	if (has_vhe())
+		sysreg_clear_set(cpacr_el1,
+				 CPACR_EL1_SMEN_EL0EN |
+				 CPACR_EL1_SMEN_EL1EN, 0);
+	else
+		sysreg_clear_set(cptr_el2, 0, CPTR_EL2_TSM);
+
+	isb();
+}
+
 /*
  * We trap the first access to the FP/SIMD to save the host context and
  * restore the guest context lazily.
@@ -195,12 +216,16 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		reg = CPACR_EL1_FPEN_EL0EN | CPACR_EL1_FPEN_EL1EN;
 		if (sve_guest)
 			reg |= CPACR_EL1_ZEN_EL0EN | CPACR_EL1_ZEN_EL1EN;
+		if (system_supports_sme())
+			reg |= CPACR_EL1_SMEN_EL0EN | CPACR_EL1_SMEN_EL1EN;
 
 		sysreg_clear_set(cpacr_el1, 0, reg);
 	} else {
 		reg = CPTR_EL2_TFP;
 		if (sve_guest)
 			reg |= CPTR_EL2_TZ;
+		if (system_supports_sme())
+			reg |= CPTR_EL2_TSM;
 
 		sysreg_clear_set(cptr_el2, reg, 0);
 	}
@@ -211,6 +236,7 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		__fpsimd_save_state(vcpu->arch.host_fpsimd_state);
 
 	/* Restore the guest state */
+	__hyp_sme_restore_guest(vcpu);
 	if (sve_guest)
 		__hyp_sve_restore_guest(vcpu);
 	else

@@ -92,7 +92,10 @@ static inline void __activate_traps_hfgxtr(struct kvm_vcpu *vcpu)
 	ctxt_sys_reg(hctxt, HFGWTR_EL2) = read_sysreg_s(SYS_HFGWTR_EL2);
 
 	if (cpus_have_final_cap(ARM64_SME)) {
-		tmp = HFGxTR_EL2_nSMPRI_EL1_MASK | HFGxTR_EL2_nTPIDR2_EL0_MASK;
+		tmp = HFGxTR_EL2_nSMPRI_EL1_MASK;
+
+		if (!vcpu_has_sme(vcpu))
+			tmp |= HFGxTR_EL2_nTPIDR2_EL0_MASK;
 
 		r_clr |= tmp;
 		w_clr |= tmp;

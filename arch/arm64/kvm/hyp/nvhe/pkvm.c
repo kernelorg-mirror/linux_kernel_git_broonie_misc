@@ -29,35 +29,35 @@ static void pvm_init_traps_aa64pfr0(struct kvm_vcpu *vcpu)
 	u64 cptr_set = 0;
 
 	/* Protected KVM does not support AArch32 guests. */
-	BUILD_BUG_ON(FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_EL0),
-		PVM_ID_AA64PFR0_RESTRICT_UNSIGNED) != ID_AA64PFR0_EL1_ELx_64BIT_ONLY);
-	BUILD_BUG_ON(FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_EL1),
-		PVM_ID_AA64PFR0_RESTRICT_UNSIGNED) != ID_AA64PFR0_EL1_ELx_64BIT_ONLY);
+	BUILD_BUG_ON(SYS_FIELD_GET(ID_AA64PFR0_EL1, EL0,
+				PVM_ID_AA64PFR0_RESTRICT_UNSIGNED) != ID_AA64PFR0_EL1_ELx_64BIT_ONLY);
+	BUILD_BUG_ON(SYS_FIELD_GET(ID_AA64PFR0_EL1, EL1,
+				PVM_ID_AA64PFR0_RESTRICT_UNSIGNED) != ID_AA64PFR0_EL1_ELx_64BIT_ONLY);
 
 	/*
 	 * Linux guests assume support for floating-point and Advanced SIMD. Do
 	 * not change the trapping behavior for these from the KVM default.
 	 */
-	BUILD_BUG_ON(!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_FP),
-				PVM_ID_AA64PFR0_ALLOW));
-	BUILD_BUG_ON(!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_AdvSIMD),
-				PVM_ID_AA64PFR0_ALLOW));
+	BUILD_BUG_ON(!SYS_FIELD_GET(ID_AA64PFR0_EL1, FP,
+				    PVM_ID_AA64PFR0_ALLOW));
+	BUILD_BUG_ON(!SYS_FIELD_GET(ID_AA64PFR0_EL1, AdvSIMD,
+				    PVM_ID_AA64PFR0_ALLOW));
 
 	/* Trap RAS unless all current versions are supported */
-	if (FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_RAS), feature_ids) <
+	if (SYS_FIELD_GET(ID_AA64PFR0_EL1, RAS, feature_ids) <
 	    ID_AA64PFR0_EL1_RAS_V1P1) {
 		hcr_set |= HCR_TERR | HCR_TEA;
 		hcr_clear |= HCR_FIEN;
 	}
 
 	/* Trap AMU */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_AMU), feature_ids)) {
+	if (!SYS_FIELD_GET(ID_AA64PFR0_EL1, AMU, feature_ids)) {
 		hcr_clear |= HCR_AMVOFFEN;
 		cptr_set |= CPTR_EL2_TAM;
 	}
 
 	/* Trap SVE */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_SVE), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64PFR0_EL1, SVE, feature_ids))
 		cptr_set |= CPTR_EL2_TZ;
 
 	vcpu->arch.hcr_el2 |= hcr_set;
@@ -75,7 +75,7 @@ static void pvm_init_traps_aa64pfr1(struct kvm_vcpu *vcpu)
 	u64 hcr_clear = 0;
 
 	/* Memory Tagging: Trap and Treat as Untagged if not supported. */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_MTE), feature_ids)) {
+	if (SYS_FIELD_GET(ID_AA64PFR1_EL1, MTE, feature_ids)) {
 		hcr_set |= HCR_TID5;
 		hcr_clear |= HCR_DCT | HCR_ATA;
 	}
@@ -95,32 +95,32 @@ static void pvm_init_traps_aa64dfr0(struct kvm_vcpu *vcpu)
 	u64 cptr_set = 0;
 
 	/* Trap/constrain PMU */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer), feature_ids)) {
+	if (!SYS_FIELD_GET(ID_AA64DFR0_EL1, PMUVer, feature_ids)) {
 		mdcr_set |= MDCR_EL2_TPM | MDCR_EL2_TPMCR;
 		mdcr_clear |= MDCR_EL2_HPME | MDCR_EL2_MTPME |
 			      MDCR_EL2_HPMN_MASK;
 	}
 
 	/* Trap Debug */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DebugVer), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64DFR0_EL1, DebugVer, feature_ids))
 		mdcr_set |= MDCR_EL2_TDRA | MDCR_EL2_TDA | MDCR_EL2_TDE;
 
 	/* Trap OS Double Lock */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DoubleLock), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64DFR0_EL1, DoubleLock, feature_ids))
 		mdcr_set |= MDCR_EL2_TDOSA;
 
 	/* Trap SPE */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMSVer), feature_ids)) {
+	if (!SYS_FIELD_GET(ID_AA64DFR0_EL1, PMSVer, feature_ids)) {
 		mdcr_set |= MDCR_EL2_TPMS;
 		mdcr_clear |= MDCR_EL2_E2PB_MASK << MDCR_EL2_E2PB_SHIFT;
 	}
 
 	/* Trap Trace Filter */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_TraceFilt), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64DFR0_EL1, TraceFilt, feature_ids))
 		mdcr_set |= MDCR_EL2_TTRF;
 
 	/* Trap Trace */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_TraceVer), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64DFR0_EL1, TraceVer, feature_ids))
 		cptr_set |= CPTR_EL2_TTA;
 
 	vcpu->arch.mdcr_el2 |= mdcr_set;
@@ -137,7 +137,7 @@ static void pvm_init_traps_aa64mmfr0(struct kvm_vcpu *vcpu)
 	u64 mdcr_set = 0;
 
 	/* Trap Debug Communications Channel registers */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64MMFR0_EL1_FGT), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64MMFR0_EL1, FGT, feature_ids))
 		mdcr_set |= MDCR_EL2_TDCC;
 
 	vcpu->arch.mdcr_el2 |= mdcr_set;
@@ -152,7 +152,7 @@ static void pvm_init_traps_aa64mmfr1(struct kvm_vcpu *vcpu)
 	u64 hcr_set = 0;
 
 	/* Trap LOR */
-	if (!FIELD_GET(ARM64_FEATURE_MASK(ID_AA64MMFR1_EL1_LO), feature_ids))
+	if (!SYS_FIELD_GET(ID_AA64MMFR1_EL1, LO, feature_ids))
 		hcr_set |= HCR_TLOR;
 
 	vcpu->arch.hcr_el2 |= hcr_set;

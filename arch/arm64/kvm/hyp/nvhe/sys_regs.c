@@ -92,10 +92,10 @@ static u64 get_pvm_id_aa64pfr0(const struct kvm_vcpu *vcpu)
 		PVM_ID_AA64PFR0_RESTRICT_UNSIGNED);
 
 	/* Spectre and Meltdown mitigation in KVM */
-	set_mask |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2),
-			       (u64)kvm->arch.pfr0_csv2);
-	set_mask |= FIELD_PREP(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3),
-			       (u64)kvm->arch.pfr0_csv3);
+	set_mask |= SYS_FIELD_PREP(ID_AA64PFR0_EL1, CSV2,
+				   (u64)kvm->arch.pfr0_csv2);
+	set_mask |= SYS_FIELD_PREP(ID_AA64PFR0_EL1, CSV3,
+				   (u64)kvm->arch.pfr0_csv3);
 
 	return (id_aa64pfr0_el1_sys_val & allow_mask) | set_mask;
 }
@@ -281,8 +281,8 @@ static bool pvm_access_id_aarch32(struct kvm_vcpu *vcpu,
 	 * No support for AArch32 guests, therefore, pKVM has no sanitized copy
 	 * of AArch32 feature id registers.
 	 */
-	BUILD_BUG_ON(FIELD_GET(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_EL1),
-		     PVM_ID_AA64PFR0_RESTRICT_UNSIGNED) > ID_AA64PFR0_EL1_ELx_64BIT_ONLY);
+	BUILD_BUG_ON(SYS_FIELD_GET(ID_AA64PFR0_EL1, EL1,
+			   PVM_ID_AA64PFR0_RESTRICT_UNSIGNED) > ID_AA64PFR0_EL1_ELx_64BIT_ONLY);
 
 	return pvm_access_raz_wi(vcpu, p, r);
 }

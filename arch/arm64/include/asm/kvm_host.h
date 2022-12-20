@@ -677,6 +677,12 @@ struct kvm_vcpu_arch {
 #define GUEST_HAS_PTRAUTH	__vcpu_single_flag(cflags, BIT(2))
 /* KVM_ARM_VCPU_INIT completed */
 #define VCPU_INITIALIZED	__vcpu_single_flag(cflags, BIT(3))
+/* SME1 exposed to guest */
+#define GUEST_HAS_SME		__vcpu_single_flag(cflags, BIT(4))
+/* SME2 exposed to guest */
+#define GUEST_HAS_SME2		__vcpu_single_flag(cflags, BIT(5))
+/* FA64 exposed to guest */
+#define GUEST_HAS_FA64		__vcpu_single_flag(cflags, BIT(6))
 
 /* Exception pending */
 #define PENDING_EXCEPTION	__vcpu_single_flag(iflags, BIT(0))
@@ -746,6 +752,13 @@ struct kvm_vcpu_arch {
 
 #define vcpu_has_sve(vcpu) (system_supports_sve() &&			\
 			    vcpu_get_flag(vcpu, GUEST_HAS_SVE))
+
+#define vcpu_has_sme(vcpu) (system_supports_sme() &&			\
+			    vcpu_get_flag(vcpu, GUEST_HAS_SME))
+#define vcpu_has_sme2(vcpu) (system_supports_sme2() &&			\
+			     vcpu_get_flag(vcpu, GUEST_HAS_SME2))
+#define vcpu_has_fa64(vcpu) (system_supports_fa64() &&			\
+			     vcpu_get_flag(vcpu, GUEST_HAS_FA64))
 
 #ifdef CONFIG_ARM64_PTR_AUTH
 #define vcpu_has_ptrauth(vcpu)						\

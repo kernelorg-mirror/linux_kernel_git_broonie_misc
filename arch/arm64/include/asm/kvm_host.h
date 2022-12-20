@@ -333,6 +333,7 @@ enum vcpu_sysreg {
 	ACTLR_EL1,	/* Auxiliary Control Register */
 	CPACR_EL1,	/* Coprocessor Access Control */
 	ZCR_EL1,	/* SVE Control */
+	SMCR_EL1,	/* SME Control */
 	TTBR0_EL1,	/* Translation Table Base Register 0 */
 	TTBR1_EL1,	/* Translation Table Base Register 1 */
 	TCR_EL1,	/* Translation Control Register */

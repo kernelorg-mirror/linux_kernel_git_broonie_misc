@@ -106,7 +106,7 @@ static u64 get_pvm_id_aa64pfr1(const struct kvm_vcpu *vcpu)
 	u64 allow_mask = PVM_ID_AA64PFR1_ALLOW;
 
 	if (!kvm_has_mte(kvm))
-		allow_mask &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_MTE);
+		allow_mask &= ~ID_AA64PFR1_EL1_MTE_MASK;
 
 	return id_aa64pfr1_el1_sys_val & allow_mask;
 }
@@ -171,10 +171,10 @@ static u64 get_pvm_id_aa64isar1(const struct kvm_vcpu *vcpu)
 	u64 allow_mask = PVM_ID_AA64ISAR1_ALLOW;
 
 	if (!vcpu_has_ptrauth(vcpu))
-		allow_mask &= ~(ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_APA) |
-				ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_API) |
-				ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_GPA) |
-				ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_GPI));
+		allow_mask &= ~(ID_AA64ISAR1_EL1_APA_MASK |
+				ID_AA64ISAR1_EL1_API_MASK |
+				ID_AA64ISAR1_EL1_GPA_MASK |
+				ID_AA64ISAR1_EL1_GPI_MASK);
 
 	return id_aa64isar1_el1_sys_val & allow_mask;
 }
@@ -184,8 +184,8 @@ static u64 get_pvm_id_aa64isar2(const struct kvm_vcpu *vcpu)
 	u64 allow_mask = PVM_ID_AA64ISAR2_ALLOW;
 
 	if (!vcpu_has_ptrauth(vcpu))
-		allow_mask &= ~(ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_APA3) |
-				ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_GPA3));
+		allow_mask &= ~(ID_AA64ISAR2_EL1_APA3_MASK |
+				ID_AA64ISAR2_EL1_GPA3_MASK);
 
 	return id_aa64isar2_el1_sys_val & allow_mask;
 }

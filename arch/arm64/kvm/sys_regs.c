@@ -1108,52 +1108,52 @@ static u64 read_id_reg(const struct kvm_vcpu *vcpu, struct sys_reg_desc const *r
 	switch (id) {
 	case SYS_ID_AA64PFR0_EL1:
 		if (!vcpu_has_sve(vcpu))
-			val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_SVE);
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_AMU);
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2);
+			val &= ~ID_AA64PFR0_EL1_SVE_MASK;
+		val &= ~ID_AA64PFR0_EL1_AMU_MASK;
+		val &= ~ID_AA64PFR0_EL1_CSV2_MASK;
 		val |= SYS_FIELD_PREP(ID_AA64PFR0_EL1, CSV2,
 				      (u64)vcpu->kvm->arch.pfr0_csv2);
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3);
+		val &= ~ID_AA64PFR0_EL1_CSV3_MASK;
 		val |= SYS_FIELD_PREP(ID_AA64PFR0_EL1, CSV3,
 				      (u64)vcpu->kvm->arch.pfr0_csv3);
 		if (kvm_vgic_global_state.type == VGIC_V3) {
-			val &= ~ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_GIC);
+			val &= ~ID_AA64PFR0_EL1_GIC_MASK;
 			val |= SYS_FIELD_PREP(ID_AA64PFR0_EL1, GIC, 1);
 		}
 		break;
 	case SYS_ID_AA64PFR1_EL1:
 		if (!kvm_has_mte(vcpu->kvm))
-			val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_MTE);
+			val &= ~ID_AA64PFR1_EL1_MTE_MASK;
 
-		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_SME);
+		val &= ~ID_AA64PFR1_EL1_SME_MASK;
 		break;
 	case SYS_ID_AA64ISAR1_EL1:
 		if (!vcpu_has_ptrauth(vcpu))
-			val &= ~(ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_APA) |
-				 ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_API) |
-				 ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_GPA) |
-				 ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_GPI));
+			val &= ~(ID_AA64ISAR1_EL1_APA_MASK |
+				 ID_AA64ISAR1_EL1_API_MASK |
+				 ID_AA64ISAR1_EL1_GPA_MASK |
+				 ID_AA64ISAR1_EL1_GPI_MASK);
 		break;
 	case SYS_ID_AA64ISAR2_EL1:
 		if (!vcpu_has_ptrauth(vcpu))
-			val &= ~(ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_APA3) |
-				 ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_GPA3));
+			val &= ~(ID_AA64ISAR2_EL1_APA3_MASK |
+				 ID_AA64ISAR2_EL1_GPA3_MASK);
 		if (!cpus_have_final_cap(ARM64_HAS_WFXT))
-			val &= ~ARM64_FEATURE_MASK(ID_AA64ISAR2_EL1_WFxT);
+			val &= ~ID_AA64ISAR2_EL1_WFxT_MASK;
 		break;
 	case SYS_ID_AA64DFR0_EL1:
 		/* Limit debug to ARMv8.0 */
-		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_DebugVer);
+		val &= ~ID_AA64DFR0_EL1_DebugVer_MASK;
 		val |= SYS_FIELD_PREP(ID_AA64DFR0_EL1, DebugVer, 6);
 		/* Set PMUver to the required version */
-		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
+		val &= ~ID_AA64DFR0_EL1_PMUVer_MASK;
 		val |= SYS_FIELD_PREP(ID_AA64DFR0_EL1, PMUVer,
 				      vcpu_pmuver(vcpu));
 		/* Hide SPE from guests */
-		val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMSVer);
+		val &= ~ID_AA64DFR0_EL1_PMSVer_MASK;
 		break;
 	case SYS_ID_DFR0_EL1:
-		val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
+		val &= ~ID_DFR0_EL1_PerfMon_MASK;
 		val |= SYS_FIELD_PREP(ID_DFR0_EL1, PerfMon,
 				      pmuver_to_perfmon(vcpu_pmuver(vcpu)));
 		break;
@@ -1244,8 +1244,8 @@ static int set_id_aa64pfr0_el1(struct kvm_vcpu *vcpu,
 
 	/* We can only differ with CSV[23], and anything else is an error */
 	val ^= read_id_reg(vcpu, rd);
-	val &= ~(ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV2) |
-		 ARM64_FEATURE_MASK(ID_AA64PFR0_EL1_CSV3));
+	val &= ~(ID_AA64PFR0_EL1_CSV2_MASK |
+		 ID_AA64PFR0_EL1_CSV3_MASK);
 	if (val)
 		return -EINVAL;
 
@@ -1282,7 +1282,7 @@ static int set_id_aa64dfr0_el1(struct kvm_vcpu *vcpu,
 
 	/* We can only differ with PMUver, and anything else is an error */
 	val ^= read_id_reg(vcpu, rd);
-	val &= ~ARM64_FEATURE_MASK(ID_AA64DFR0_EL1_PMUVer);
+	val &= ~ID_AA64DFR0_EL1_PMUVer_MASK;
 	if (val)
 		return -EINVAL;
 
@@ -1322,7 +1322,7 @@ static int set_id_dfr0_el1(struct kvm_vcpu *vcpu,
 
 	/* We can only differ with PerfMon, and anything else is an error */
 	val ^= read_id_reg(vcpu, rd);
-	val &= ~ARM64_FEATURE_MASK(ID_DFR0_EL1_PerfMon);
+	val &= ~ID_DFR0_EL1_PerfMon_MASK;
 	if (val)
 		return -EINVAL;
 

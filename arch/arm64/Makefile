@@ -205,6 +205,12 @@ ifdef CONFIG_COMPAT_VDSO
 endif
 endif
 
+include $(srctree)/scripts/Makefile.defconf
+
+PHONY += defconfig
+defconfig:
+	$(call merge_into_defconfig,base.config,platforms)
+
 define archhelp
   echo  '* Image.gz      - Compressed kernel image (arch/$(ARCH)/boot/Image.gz)'
   echo  '  Image         - Uncompressed kernel image (arch/$(ARCH)/boot/Image)'

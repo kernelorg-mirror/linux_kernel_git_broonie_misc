@@ -211,6 +211,10 @@ PHONY += defconfig
 defconfig:
 	$(call merge_into_defconfig,base.config,platforms)
 
+PHONY += virtconfig
+virtconfig:
+	$(call merge_into_defconfig,base.config,virt)
+
 define archhelp
   echo  '* Image.gz      - Compressed kernel image (arch/$(ARCH)/boot/Image.gz)'
   echo  '  Image         - Uncompressed kernel image (arch/$(ARCH)/boot/Image)'

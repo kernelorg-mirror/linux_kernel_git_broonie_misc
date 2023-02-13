@@ -305,4 +305,21 @@ struct prctl_mm_map {
 # define PR_RISCV_V_VSTATE_CTRL_NEXT_MASK	0xc
 # define PR_RISCV_V_VSTATE_CTRL_MASK		0x1f
 
+/*
+ * get shadow stack status for current thread. Assumes shadow stack is min 4 byte aligned.
+ * Note shadow stack can be 8 byte aligned on 64bit.
+ * Lower 2 bits can give status of locked and enabled/disabled.
+ * size and address range can be obtained via /proc/maps. get_shadow_stack_status will
+ * return base of shadow stack.
+ */
+#define PR_GET_SHADOW_STACK_STATUS      71
+/*
+ * set shadow stack status for current thread (including enabling, disabling or locking)
+ * note that it will only set the status and setup of the shadow stack. Allocating shadow
+ * stack should be done separately using mmap.
+ */
+#define PR_SET_SHADOW_STACK_STATUS      72
+# define PR_SHADOW_STACK_LOCK           (1UL << 0)
+# define PR_SHADOW_STACK_ENABLE         (1UL << 1)
+
 #endif /* _LINUX_PRCTL_H */

@@ -21,7 +21,9 @@
 #include <linux/spi/s3c24xx-fiq.h>
 #include <linux/module.h>
 
+#ifdef CONFIG_SPI_S3C24XX_FIQ
 #include <asm/fiq.h>
+#endif
 
 #include "spi-s3c24xx-regs.h"
 
@@ -56,10 +58,12 @@ struct s3c24xx_spi {
 	int			 len;
 	int			 count;
 
+#ifdef CONFIG_SPI_S3C24XX_FIQ
 	struct fiq_handler	 fiq_handler;
 	enum spi_fiq_mode	 fiq_mode;
 	unsigned char		 fiq_inuse;
 	unsigned char		 fiq_claimed;
+#endif
 
 	/* data buffers */
 	const unsigned char	*tx;

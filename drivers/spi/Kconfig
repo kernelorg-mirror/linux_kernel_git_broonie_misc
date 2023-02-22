@@ -862,7 +862,7 @@ config SPI_S3C24XX
 
 config SPI_S3C24XX_FIQ
 	bool "S3C24XX driver with FIQ pseudo-DMA"
-	depends on SPI_S3C24XX
+	depends on SPI_S3C24XX=y
 	select FIQ
 	help
 	  Enable FIQ support for the S3C24XX SPI driver to provide pseudo

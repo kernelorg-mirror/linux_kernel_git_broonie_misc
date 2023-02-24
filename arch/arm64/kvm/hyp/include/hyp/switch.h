@@ -88,33 +88,36 @@ static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
 	vcpu->arch.mdcr_el2_host = read_sysreg(mdcr_el2);
 	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
 
-	if (cpus_have_final_cap(ARM64_SME)) {
-		sysreg_clear_set_s(SYS_HFGRTR_EL2,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK,
-				   0);
-		sysreg_clear_set_s(SYS_HFGWTR_EL2,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK,
-				   0);
+	if (cpus_have_final_cap(ARM64_HAS_FGT)) {
+		write_sysreg_s(__vcpu_sys_reg(vcpu, HFGRTR_EL2),
+			       SYS_HFGRTR_EL2);
+
+		write_sysreg_s(__vcpu_sys_reg(vcpu, HFGWTR_EL2),
+			       SYS_HFGWTR_EL2);
 	}
 }
 
 static inline void __deactivate_traps_common(struct kvm_vcpu *vcpu)
 {
+	struct kvm_cpu_context *host_ctxt;
+
 	write_sysreg(vcpu->arch.mdcr_el2_host, mdcr_el2);
 
 	write_sysreg(0, hstr_el2);
 	if (kvm_arm_support_pmu_v3())
 		write_sysreg(0, pmuserenr_el0);
 
-	if (cpus_have_final_cap(ARM64_SME)) {
-		sysreg_clear_set_s(SYS_HFGRTR_EL2, 0,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK);
-		sysreg_clear_set_s(SYS_HFGWTR_EL2, 0,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK);
+	/*
+	 * Restore the host FGT configuration here since it's managing
+	 * traps.
+	 */
+	if (cpus_have_final_cap(ARM64_HAS_FGT)) {
+		host_ctxt = &this_cpu_ptr(&kvm_host_data)->host_ctxt;
+
+		write_sysreg_s(__vcpu_sys_reg(vcpu, HFGRTR_EL2),
+			       SYS_HFGRTR_EL2);
+		write_sysreg_s(__vcpu_sys_reg(vcpu, HFGWTR_EL2),
+			       SYS_HFGWTR_EL2);
 	}
 }
 

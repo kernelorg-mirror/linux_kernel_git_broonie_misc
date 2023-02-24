@@ -365,6 +365,8 @@ enum vcpu_sysreg {
 	TPIDR_EL2,	/* EL2 Software Thread ID Register */
 	CNTHCTL_EL2,	/* Counter-timer Hypervisor Control register */
 	SP_EL2,		/* EL2 Stack Pointer */
+	HFGRTR_EL2,	/* Fine Grained Read Traps */
+	HFGWTR_EL2,	/* Fine Grained Write Traps */
 
 	NR_SYS_REGS	/* Nothing after this line! */
 };

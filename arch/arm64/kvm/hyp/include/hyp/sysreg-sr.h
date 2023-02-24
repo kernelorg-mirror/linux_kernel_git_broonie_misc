@@ -19,6 +19,15 @@
 static inline void __sysreg_save_common_state(struct kvm_cpu_context *ctxt)
 {
 	ctxt_sys_reg(ctxt, MDSCR_EL1)	= read_sysreg(mdscr_el1);
+
+	/*
+	 * These are restored as part of trap disablement rather than
+	 * in __sysreg_restore_common_state().
+	 */
+	if (cpus_have_final_cap(ARM64_HAS_FGT)) {
+		ctxt_sys_reg(ctxt, HFGRTR_EL2) = read_sysreg_s(SYS_HFGRTR_EL2);
+		ctxt_sys_reg(ctxt, HFGWTR_EL2) = read_sysreg_s(SYS_HFGWTR_EL2);
+	}
 }
 
 static inline void __sysreg_save_user_state(struct kvm_cpu_context *ctxt)

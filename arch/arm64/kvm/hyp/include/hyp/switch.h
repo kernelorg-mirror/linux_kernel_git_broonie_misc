@@ -88,15 +88,14 @@ static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
 	vcpu->arch.mdcr_el2_host = read_sysreg(mdcr_el2);
 	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
 
-	if (cpus_have_final_cap(ARM64_SME)) {
-		sysreg_clear_set_s(SYS_HFGRTR_EL2,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK,
-				   0);
-		sysreg_clear_set_s(SYS_HFGWTR_EL2,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK,
-				   0);
+	if (cpus_have_final_cap(ARM64_HAS_FGT)) {
+		if (vcpu->arch.hfgrtr_el2_host != vcpu->arch.hfgrtr_el2)
+			write_sysreg_s(vcpu->arch.hfgrtr_el2,
+				       SYS_HFGRTR_EL2);
+
+		if (vcpu->arch.hfgwtr_el2_host != vcpu->arch.hfgwtr_el2)
+			write_sysreg_s(vcpu->arch.hfgwtr_el2,
+				       SYS_HFGWTR_EL2);
 	}
 }
 
@@ -108,13 +107,13 @@ static inline void __deactivate_traps_common(struct kvm_vcpu *vcpu)
 	if (kvm_arm_support_pmu_v3())
 		write_sysreg(0, pmuserenr_el0);
 
-	if (cpus_have_final_cap(ARM64_SME)) {
-		sysreg_clear_set_s(SYS_HFGRTR_EL2, 0,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK);
-		sysreg_clear_set_s(SYS_HFGWTR_EL2, 0,
-				   HFGxTR_EL2_nSMPRI_EL1_MASK |
-				   HFGxTR_EL2_nTPIDR2_EL0_MASK);
+	if (cpus_have_final_cap(ARM64_HAS_FGT)) {
+		if (vcpu->arch.hfgrtr_el2_host != vcpu->arch.hfgrtr_el2)
+			write_sysreg_s(vcpu->arch.hfgrtr_el2_host,
+				       SYS_HFGRTR_EL2);
+		if (vcpu->arch.hfgwtr_el2_host != vcpu->arch.hfgwtr_el2)
+			write_sysreg_s(vcpu->arch.hfgwtr_el2_host,
+				       SYS_HFGWTR_EL2);
 	}
 }
 

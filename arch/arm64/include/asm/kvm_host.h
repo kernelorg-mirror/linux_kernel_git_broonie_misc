@@ -377,6 +377,9 @@ struct kvm_cpu_context {
 	u64	spsr_irq;
 	u64	spsr_fiq;
 
+	u64	hfgrtr_el2;
+	u64	hfgwtr_el2;
+
 	struct user_fpsimd_state fp_regs;
 
 	u64 sys_regs[NR_SYS_REGS];

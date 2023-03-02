@@ -145,14 +145,16 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.fp_state == FP_STATE_GUEST_OWNED) {
 
 		/*
-		 * Currently we do not support SME guests so SVCR is
-		 * always 0 and we just need a variable to point to.
+		 * We peer into the registers since SVCR is saved as
+		 * part of the floating point state, determining which
+		 * registers exist and their size, so is saved by
+		 * fpsimd_save().
 		 */
 		fp_state.st = &vcpu->arch.ctxt.fp_regs;
 		fp_state.sve_state = vcpu->arch.sve_state;
 		fp_state.sve_vl = vcpu->arch.max_vl[ARM64_VEC_SVE];
 		fp_state.sme_state = NULL;
-		fp_state.svcr = &vcpu->arch.svcr;
+		fp_state.svcr = &(vcpu->arch.ctxt.sys_regs[SVCR]);
 		fp_state.fp_type = &vcpu->arch.fp_type;
 
 		if (vcpu_has_sve(vcpu))

@@ -320,6 +320,7 @@ enum vcpu_sysreg {
 	MDCCINT_EL1,	/* Monitor Debug Comms Channel Interrupt Enable Reg */
 	OSLSR_EL1,	/* OS Lock Status Register */
 	DISR_EL1,	/* Deferred Interrupt Status Register */
+	SVCR,		/* Scalable Vector Control Register */
 
 	/* Performance Monitors Registers */
 	PMCR_EL0,	/* Control Register */
@@ -482,7 +483,6 @@ struct kvm_vcpu_arch {
 	void *sve_state;
 	enum fp_type fp_type;
 	unsigned int max_vl[ARM64_VEC_MAX];
-	u64 svcr;
 
 	/* Stage 2 paging state used by the hardware on next switch */
 	struct kvm_s2_mmu *hw_mmu;

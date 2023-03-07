@@ -481,6 +481,7 @@ struct kvm_vcpu_arch {
 	 * records which view it saved in fp_type.
 	 */
 	void *sve_state;
+	void *sme_state;
 	enum fp_type fp_type;
 	unsigned int max_vl[ARM64_VEC_MAX];
 
@@ -785,12 +786,14 @@ struct kvm_vcpu_arch {
 #define vcpu_gp_regs(v)		(&(v)->arch.ctxt.regs)
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
-#define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
-			     sve_ffr_offset((vcpu)->arch.max_vl[ARM64_VEC_SVE]))
+#define vcpu_sve_pffr(vcpu, vec) (kern_hyp_va((vcpu)->arch.sve_state) +	\
+			     sve_ffr_offset((vcpu)->arch.max_vl[vec]))
 
 #define vcpu_vec_max_vq(type, vcpu) sve_vq_from_vl((vcpu)->arch.max_vl[type])
 
 #define vcpu_sve_max_vq(vcpu)	vcpu_vec_max_vq(ARM64_VEC_SVE, vcpu)
+
+#define vcpu_sme_max_vq(vcpu)	vcpu_vec_max_vq(ARM64_VEC_SME, vcpu)
 
 #define vcpu_sve_state_size(vcpu) ({					\
 	size_t __size_ret;						\

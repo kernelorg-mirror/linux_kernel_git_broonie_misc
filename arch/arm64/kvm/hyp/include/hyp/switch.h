@@ -276,9 +276,45 @@ static inline bool __populate_fault_info(struct kvm_vcpu *vcpu)
 static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
 {
 	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
-	__sve_restore_state(vcpu_sve_pffr(vcpu),
-			    &vcpu->arch.ctxt.fp_regs.fpsr, true);
 	write_sysreg_el1(__vcpu_sys_reg(vcpu, ZCR_EL1), SYS_ZCR);
+}
+
+static inline void __hyp_sme_restore_guest(struct kvm_vcpu *vcpu,
+					   bool *restore_sve_regs,
+					   bool *restore_ffr,
+					   enum vec_type *vec_type)
+{
+	u64 svcr, old_smcr, new_smcr;
+
+	/* Configure VL and features for the guest */
+	old_smcr = read_sysreg_s(SYS_SMCR_EL2);
+	new_smcr = old_smcr & ~(SMCR_ELx_LEN_MASK | SMCR_ELx_FA64_MASK |
+				SMCR_ELx_EZT0_MASK);
+	new_smcr |= (vcpu_sme_max_vq(vcpu) - 1) & SMCR_ELx_LEN_MASK;
+	if (vcpu_has_fa64(vcpu))
+		new_smcr |= SMCR_ELx_FA64_MASK;
+	if (vcpu_has_sme2(vcpu))
+		new_smcr |= SMCR_ELx_EZT0_MASK;
+	if (old_smcr != new_smcr)
+		write_sysreg_s(new_smcr, SYS_SMCR_EL2);
+
+	write_sysreg_el1(__vcpu_sys_reg(vcpu, SMCR_EL1), SYS_SMCR);
+
+	/* Restore SVCR first to ensure PSTATE.{SM,ZA} are configured */
+	svcr = __vcpu_sys_reg(vcpu, SVCR);
+	write_sysreg_s(svcr, SYS_SVCR);
+
+	if (svcr & SVCR_SM_MASK) {
+		*restore_sve_regs = true;
+		*restore_ffr = vcpu_has_fa64(vcpu);
+		*vec_type = ARM64_VEC_SME;
+	}
+
+	if (svcr & SVCR_ZA_MASK)
+		__sme_restore_state(kern_hyp_va((vcpu)->arch.sme_state),
+				    vcpu_has_sme2(vcpu));
+
+	write_sysreg_el1(__vcpu_sys_reg(vcpu, SMCR_EL1), SYS_SMCR);
 }
 
 /*
@@ -289,15 +325,20 @@ static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
  */
 static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
-	bool sve_guest;
-	u8 esr_ec;
+	bool sve_guest, sme_guest;
+	u8 esr_ec, esr_iss;
 	u64 reg;
+	bool restore_ffr;
+	bool restore_sve_regs;
+	enum vec_type vec_type = ARM64_VEC_SVE;
 
 	if (!system_supports_fpsimd())
 		return false;
 
 	sve_guest = vcpu_has_sve(vcpu);
+	sme_guest = vcpu_has_sme(vcpu);
 	esr_ec = kvm_vcpu_trap_get_class(vcpu);
+	esr_iss = ESR_ELx_ISS(kvm_vcpu_get_esr(vcpu));
 
 	/* Only handle traps the vCPU can support here: */
 	switch (esr_ec) {
@@ -305,6 +346,14 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		break;
 	case ESR_ELx_EC_SVE:
 		if (!sve_guest)
+			return false;
+		break;
+	case ESR_ELx_EC_SME:
+		if (!sme_guest)
+			return false;
+
+		if (!vcpu_has_sme2(vcpu) &&
+		    (esr_iss == ESR_ELx_SME_ISS_ZT_DISABLED))
 			return false;
 		break;
 	default:
@@ -318,12 +367,16 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		reg = CPACR_EL1_FPEN_EL0EN | CPACR_EL1_FPEN_EL1EN;
 		if (sve_guest)
 			reg |= CPACR_EL1_ZEN_EL0EN | CPACR_EL1_ZEN_EL1EN;
+		if (sme_guest)
+			reg |= CPACR_EL1_SMEN_EL0EN | CPACR_EL1_SMEN_EL1EN;
 
 		sysreg_clear_set(cpacr_el1, 0, reg);
 	} else {
 		reg = CPTR_EL2_TFP;
 		if (sve_guest)
 			reg |= CPTR_EL2_TZ;
+		if (sme_guest)
+			reg |= CPTR_EL2_TSM;
 
 		sysreg_clear_set(cptr_el2, reg, 0);
 	}
@@ -334,8 +387,24 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		__fpsimd_save_state(vcpu->arch.host_fpsimd_state);
 
 	/* Restore the guest state */
+
+	/*
+	 * These may be overridden if the guest has SME, the host can
+	 * have SME without SVE and in streaming mode SME may lack FFR.
+	 */
+	restore_sve_regs = sve_guest;
+	restore_ffr = sve_guest;
+
 	if (sve_guest)
 		__hyp_sve_restore_guest(vcpu);
+	if (sme_guest)
+		__hyp_sme_restore_guest(vcpu, &restore_sve_regs, &restore_ffr,
+					&vec_type);
+
+	if (restore_sve_regs)
+		__sve_restore_state(vcpu_sve_pffr(vcpu, vec_type),
+				    &vcpu->arch.ctxt.fp_regs.fpsr,
+				    restore_ffr);
 	else
 		__fpsimd_restore_state(&vcpu->arch.ctxt.fp_regs);
 

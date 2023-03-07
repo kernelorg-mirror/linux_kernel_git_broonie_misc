@@ -112,6 +112,7 @@ void __debug_restore_host_buffers_nvhe(struct kvm_vcpu *vcpu);
 void __fpsimd_save_state(struct user_fpsimd_state *fp_regs);
 void __fpsimd_restore_state(struct user_fpsimd_state *fp_regs);
 void __sve_restore_state(void *sve_pffr, u32 *fpsr, bool restore_ffr);
+void __sme_restore_state(void const *state, bool zt);
 
 u64 __guest_enter(struct kvm_vcpu *vcpu);
 

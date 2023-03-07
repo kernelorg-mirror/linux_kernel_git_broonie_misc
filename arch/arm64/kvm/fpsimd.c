@@ -153,10 +153,15 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 		fp_state.st = &vcpu->arch.ctxt.fp_regs;
 		fp_state.sve_state = vcpu->arch.sve_state;
 		fp_state.sve_vl = vcpu->arch.max_vl[ARM64_VEC_SVE];
-		fp_state.sme_state = NULL;
+		fp_state.sme_vl = vcpu->arch.max_vl[ARM64_VEC_SME];
+		fp_state.sme_state = vcpu->arch.sme_state;
 		fp_state.svcr = &(vcpu->arch.ctxt.sys_regs[SVCR]);
 		fp_state.fp_type = &vcpu->arch.fp_type;
 
+		/*
+		 * If we are in streaming mode PSTATE.SM will override
+		 * FP_STATE_FPSIMD during save for SME only guests.
+		 */
 		if (vcpu_has_sve(vcpu))
 			fp_state.to_save = FP_STATE_SVE;
 		else
@@ -177,25 +182,10 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 {
 	unsigned long flags;
+	u64 cpacr_set, cpacr_clear;
+	u64 smcr_cur, smcr_new;
 
 	local_irq_save(flags);
-
-	/*
-	 * If we have VHE then the Hyp code will reset CPACR_EL1 to
-	 * the default value and we need to reenable SME.
-	 */
-	if (has_vhe() && system_supports_sme()) {
-		/* Also restore EL0 state seen on entry */
-		if (vcpu_get_flag(vcpu, HOST_SME_ENABLED))
-			sysreg_clear_set(CPACR_EL1, 0,
-					 CPACR_EL1_SMEN_EL0EN |
-					 CPACR_EL1_SMEN_EL1EN);
-		else
-			sysreg_clear_set(CPACR_EL1,
-					 CPACR_EL1_SMEN_EL0EN,
-					 CPACR_EL1_SMEN_EL1EN);
-		isb();
-	}
 
 	if (vcpu->arch.fp_state == FP_STATE_GUEST_OWNED) {
 		if (vcpu_has_sve(vcpu)) {
@@ -207,19 +197,56 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 						       SYS_ZCR_EL1);
 		}
 
+		if (vcpu_has_sme(vcpu)) {
+			smcr_cur = read_sysreg_el1(SYS_SMCR);
+			__vcpu_sys_reg(vcpu, SMCR_EL1) = smcr_cur;
+
+			/* Restore the full VL and feature set */
+			if (!has_vhe()) {
+				smcr_new = vcpu_sme_max_vq(vcpu) - 1;
+
+				if (system_supports_fa64())
+					smcr_new |= SMCR_ELx_FA64;
+				if (system_supports_sme2())
+					smcr_new |= SMCR_ELx_EZT0_MASK;
+
+				if (smcr_cur != smcr_new)
+					write_sysreg_s(smcr_new, SYS_SMCR_EL1);
+			}
+		}
+
 		fpsimd_save_and_flush_cpu_state();
-	} else if (has_vhe() && system_supports_sve()) {
+	} else if (has_vhe()) {
 		/*
-		 * The FPSIMD/SVE state in the CPU has not been touched, and we
-		 * have SVE (and VHE): CPACR_EL1 (alias CPTR_EL2) has been
-		 * reset by kvm_reset_cptr_el2() in the Hyp code, disabling SVE
-		 * for EL0.  To avoid spurious traps, restore the trap state
-		 * seen by kvm_arch_vcpu_load_fp():
+		 * The FP state in the CPU has not been touched, and
+		 * we have SVE or SME (and VHE): CPACR_EL1 (alias
+		 * CPTR_EL2) has been reset by kvm_reset_cptr_el2() in
+		 * the Hyp code, disabling SVE/SME for EL0.  To avoid
+		 * spurious traps, restore the trap state seen by
+		 * kvm_arch_vcpu_load_fp():
 		 */
-		if (vcpu_get_flag(vcpu, HOST_SVE_ENABLED))
-			sysreg_clear_set(CPACR_EL1, 0, CPACR_EL1_ZEN_EL0EN);
-		else
-			sysreg_clear_set(CPACR_EL1, CPACR_EL1_ZEN_EL0EN, 0);
+
+		cpacr_clear = 0;
+		cpacr_set = 0;
+
+		if (system_supports_sve()) {
+			if (vcpu_get_flag(vcpu, HOST_SVE_ENABLED)) {
+				cpacr_set |= CPACR_EL1_ZEN_EL0EN;
+			} else {
+				cpacr_clear |= CPACR_EL1_ZEN_EL0EN;
+			}
+		}
+
+		if (system_supports_sme()) {
+			if (vcpu_get_flag(vcpu, HOST_SME_ENABLED)) {
+				cpacr_set |= CPACR_EL1_SMEN_EL0EN;
+			} else {
+				cpacr_clear |= CPACR_EL1_SMEN_EL0EN;
+			}
+		}
+
+		if (cpacr_clear || cpacr_set)
+			sysreg_clear_set(CPACR_EL1, cpacr_clear, cpacr_set);
 	}
 
 	local_irq_restore(flags);

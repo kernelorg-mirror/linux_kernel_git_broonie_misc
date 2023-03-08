@@ -42,6 +42,7 @@ struct reg_sublist {
 	long capability;
 	int feature;
 	bool finalize;
+	bool enable_capability;
 	__u64 *regs;
 	__u64 regs_n;
 	__u64 *rejects_set;
@@ -404,6 +405,18 @@ static void check_supported(struct vcpu_config *c)
 	}
 }
 
+static void enable_capabilities(struct kvm_vm *vm, struct vcpu_config *c)
+{
+	struct reg_sublist *s;
+
+	for_each_sublist(c, s) {
+		if (!s->enable_capability)
+			continue;
+
+		vm_enable_cap(vm, s->capability, 1);
+	}
+}
+
 static bool print_list;
 static bool print_filtered;
 static bool fixup_core_regs;
@@ -420,6 +433,7 @@ static void run_test(struct vcpu_config *c)
 	check_supported(c);
 
 	vm = vm_create_barebones();
+	enable_capabilities(vm, c);
 	prepare_vcpu_init(c, &init);
 	vcpu = __vm_vcpu_add(vm, 0);
 	aarch64_vcpu_setup(vcpu, &init);
@@ -1049,6 +1063,13 @@ static __u64 pauth_generic_regs[] = {
 	ARM64_SYS_REG(3, 0, 2, 3, 1),	/* APGAKEYHI_EL1 */
 };
 
+static __u64 mte_regs[] = {
+	ARM64_SYS_REG(3, 0, 1, 0, 5),	/* RGSR_EL1 */
+	ARM64_SYS_REG(3, 0, 1, 0, 6),	/* GCR_EL1 */
+	ARM64_SYS_REG(3, 0, 5, 6, 0),	/* TFSR_EL1 */
+	ARM64_SYS_REG(3, 0, 5, 6, 1),	/* TFSRE0_EL1 */
+};
+
 #define BASE_SUBLIST \
 	{ "base", .regs = base_regs, .regs_n = ARRAY_SIZE(base_regs), }
 #define VREGS_SUBLIST \
@@ -1075,6 +1096,9 @@ static __u64 pauth_generic_regs[] = {
 		.regs		= pauth_generic_regs,			\
 		.regs_n		= ARRAY_SIZE(pauth_generic_regs),	\
 	}
+#define MTE_SUBLIST \
+	{ "mte", .capability = KVM_CAP_ARM_MTE, .enable_capability = true,  \
+	  .regs = mte_regs, .regs_n = ARRAY_SIZE(mte_regs), }
 
 static struct vcpu_config vregs_config = {
 	.sublists = {
@@ -1123,6 +1147,14 @@ static struct vcpu_config pauth_pmu_config = {
 	{0},
 	},
 };
+static struct vcpu_config mte_config = {
+	.sublists = {
+	BASE_SUBLIST,
+	VREGS_SUBLIST,
+	MTE_SUBLIST,
+	{0},
+	},
+};
 
 static struct vcpu_config *vcpu_configs[] = {
 	&vregs_config,
@@ -1131,5 +1163,6 @@ static struct vcpu_config *vcpu_configs[] = {
 	&sve_pmu_config,
 	&pauth_config,
 	&pauth_pmu_config,
+	&mte_config,
 };
 static int vcpu_configs_n = ARRAY_SIZE(vcpu_configs);

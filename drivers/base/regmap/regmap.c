@@ -1941,6 +1941,15 @@ static int _regmap_bus_reg_write(void *context, unsigned int reg,
 				 unsigned int val)
 {
 	struct regmap *map = context;
+	struct regmap_range_node *range;
+	int ret;
+
+	range = _regmap_range_lookup(map, reg);
+	if (range) {
+		ret = _regmap_select_page(map, &reg, range, 1);
+		if (ret != 0)
+			return ret;
+	}
 
 	reg += map->reg_base;
 	reg >>= map->format.reg_downshift;
@@ -2841,6 +2850,15 @@ static int _regmap_bus_reg_read(void *context, unsigned int reg,
 				unsigned int *val)
 {
 	struct regmap *map = context;
+	struct regmap_range_node *range;
+	int ret;
+
+	range = _regmap_range_lookup(map, reg);
+	if (range) {
+		ret = _regmap_select_page(map, &reg, range, 1);
+		if (ret != 0)
+			return ret;
+	}
 
 	reg += map->reg_base;
 	reg >>= map->format.reg_downshift;

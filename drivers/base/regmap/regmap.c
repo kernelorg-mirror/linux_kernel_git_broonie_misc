@@ -92,6 +92,9 @@ bool regmap_writeable(struct regmap *map, unsigned int reg)
 	if (map->max_register && reg > map->max_register)
 		return false;
 
+	if (!IS_ALIGNED(reg, map->reg_stride))
+		return false;
+
 	if (map->writeable_reg)
 		return map->writeable_reg(map->dev, reg);
 
@@ -127,6 +130,9 @@ bool regmap_cached(struct regmap *map, unsigned int reg)
 bool regmap_readable(struct regmap *map, unsigned int reg)
 {
 	if (!map->reg_read)
+		return false;
+
+	if (!IS_ALIGNED(reg, map->reg_stride))
 		return false;
 
 	if (map->max_register && reg > map->max_register)

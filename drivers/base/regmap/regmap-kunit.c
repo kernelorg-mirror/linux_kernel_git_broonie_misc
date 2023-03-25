@@ -40,6 +40,12 @@ static const struct regcache_types real_cache_types_list[] = {
 
 KUNIT_ARRAY_PARAM(real_cache_types, real_cache_types_list, case_to_desc);
 
+static const struct regcache_types sparse_cache_types_list[] = {
+	{ REGCACHE_RBTREE, "rbtree" },
+};
+
+KUNIT_ARRAY_PARAM(sparse_cache_types, sparse_cache_types_list, case_to_desc);
+
 static struct regmap *gen_regmap(struct regmap_config *config,
 				 struct regmap_ram_data **data)
 {
@@ -606,6 +612,48 @@ static void cache_sync_patch(struct kunit *test)
 	regmap_exit(map);
 }
 
+static void cache_drop(struct kunit *test)
+{
+	struct regcache_types *t = (struct regcache_types *)test->param_value;
+	struct regmap *map;
+	struct regmap_config config;
+	struct regmap_ram_data *data;
+	unsigned int rval[BLOCK_TEST_SIZE];
+	int i;
+
+	config = test_regmap_config;
+	config.cache_type = t->type;
+	config.num_reg_defaults = BLOCK_TEST_SIZE;
+
+	map = gen_regmap(&config, &data);
+	KUNIT_ASSERT_FALSE(test, IS_ERR(map));
+	if (IS_ERR(map))
+		return;
+
+	/* Ensure the data is read from the cache */
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		data->read[i] = false;
+	KUNIT_EXPECT_EQ(test, 0, regmap_bulk_read(map, 0, rval,
+						  BLOCK_TEST_SIZE));
+	for (i = 0; i < BLOCK_TEST_SIZE; i++) {
+		KUNIT_EXPECT_FALSE(test, data->read[i]);
+		data->read[i] = false;
+	}
+	KUNIT_EXPECT_MEMEQ(test, data->vals, rval, sizeof(rval));
+
+	/* Drop some registers */
+	KUNIT_EXPECT_EQ(test, 0, regcache_drop_region(map, 3, 5));
+
+	/* Reread and check only the dropped registers hit the device. */
+	KUNIT_EXPECT_EQ(test, 0, regmap_bulk_read(map, 0, rval,
+						  BLOCK_TEST_SIZE));
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_EXPECT_EQ(test, data->read[i], i >= 3 && i <= 5);
+	KUNIT_EXPECT_MEMEQ(test, data->vals, rval, sizeof(rval));
+
+	regmap_exit(map);
+}
+
 static struct kunit_case regmap_test_cases[] = {
 	KUNIT_CASE_PARAM(basic_read_write, regcache_types_gen_params),
 	KUNIT_CASE_PARAM(bulk_write, regcache_types_gen_params),
@@ -619,6 +667,7 @@ static struct kunit_case regmap_test_cases[] = {
 	KUNIT_CASE_PARAM(cache_sync, real_cache_types_gen_params),
 	KUNIT_CASE_PARAM(cache_sync_defaults, real_cache_types_gen_params),
 	KUNIT_CASE_PARAM(cache_sync_patch, real_cache_types_gen_params),
+	KUNIT_CASE_PARAM(cache_drop, sparse_cache_types_gen_params),
 	{}
 };
 

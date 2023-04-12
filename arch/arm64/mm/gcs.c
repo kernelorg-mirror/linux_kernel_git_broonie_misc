@@ -52,7 +52,6 @@ unsigned long gcs_alloc_thread_stack(struct task_struct *tsk,
 		return 0;
 
 	size = gcs_size(size);
-
 	addr = alloc_gcs(0, size, 0, 0);
 	if (IS_ERR_VALUE(addr))
 		return addr;
@@ -60,6 +59,55 @@ unsigned long gcs_alloc_thread_stack(struct task_struct *tsk,
 	tsk->thread.gcs_base = addr;
 	tsk->thread.gcs_size = size;
 	tsk->thread.gcspr_el0 = addr + size - sizeof(u64);
+
+	return addr;
+}
+
+SYSCALL_DEFINE3(map_shadow_stack, unsigned long, addr, unsigned long, size, unsigned int, flags)
+{
+	unsigned long alloc_size;
+	unsigned long __user *cap_ptr;
+	unsigned long cap_val;
+	int ret;
+
+	if (!system_supports_gcs())
+		return -EOPNOTSUPP;
+
+	if (flags)
+		return -EINVAL;
+
+	if (addr % 16)
+		return -EINVAL;
+
+	if (size == 16 || size % 16)
+		return -EINVAL;
+
+	/*
+	 * An overflow would result in attempting to write the restore token
+	 * to the wrong location. Not catastrophic, but just return the right
+	 * error code and block it.
+	 */
+	alloc_size = PAGE_ALIGN(size);
+	if (alloc_size < size)
+		return -EOVERFLOW;
+
+	addr = alloc_gcs(addr, alloc_size, 0, false);
+	if (IS_ERR_VALUE(addr))
+		return addr;
+
+	/*
+	 * Put a cap token at the end of the allocated region so it
+	 * can be switched to.
+	 */
+	cap_ptr = (unsigned long __user *)(addr + size -
+					   (2 * sizeof(unsigned long)));
+	cap_val = GCS_CAP(cap_ptr);
+
+	ret = copy_to_user_gcs(cap_ptr, &cap_val, 1);
+	if (ret != 0) {
+		vm_munmap(addr, size);
+		return -EFAULT;
+	}
 
 	return addr;
 }

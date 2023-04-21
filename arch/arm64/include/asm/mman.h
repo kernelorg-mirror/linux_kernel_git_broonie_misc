@@ -61,6 +61,12 @@ static inline bool arch_validate_flags(unsigned long vm_flags)
 			return false;
 	}
 
+	if (system_supports_gcs() && (vm_flags & VM_SHADOW_STACK)) {
+		/* An executable GCS isn't a good idea */
+		if (vm_flags & (VM_EXEC | VM_ARM64_BTI))
+			return false;
+	}
+
 	return true;
 
 }

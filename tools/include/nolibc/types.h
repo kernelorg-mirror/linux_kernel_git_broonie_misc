@@ -79,8 +79,9 @@
 #define LINUX_REBOOT_CMD_SW_SUSPEND 0xd000fce2
 
 /* Macros used on waitpid()'s return status */
+#define WTERMSIG(status)    ((status) & 0x7f)
 #define WEXITSTATUS(status) (((status) & 0xff00) >> 8)
-#define WIFEXITED(status)   (((status) & 0x7f) == 0)
+#define WIFEXITED(status)   (WTERMSIG(status) == 0)
 
 /* waitpid() flags */
 #define WNOHANG      1

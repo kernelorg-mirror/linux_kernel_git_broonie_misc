@@ -321,5 +321,7 @@ struct prctl_mm_map {
 #define PR_SET_SHADOW_STACK_STATUS      72
 # define PR_SHADOW_STACK_LOCK           (1UL << 0)
 # define PR_SHADOW_STACK_ENABLE         (1UL << 1)
+# define PR_SHADOW_STACK_WRITE		(1UL << 2)
+# define PR_SHADOW_STACK_PUSH		(1UL << 3)
 
 #endif /* _LINUX_PRCTL_H */

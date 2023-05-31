@@ -8,6 +8,138 @@
 #include <asm/cpufeature.h>
 #include <asm/page.h>
 
+static unsigned long alloc_gcs(unsigned long addr, unsigned long size)
+{
+	int flags = MAP_ANONYMOUS | MAP_PRIVATE;
+	struct mm_struct *mm = current->mm;
+	unsigned long mapped_addr, unused;
+
+	if (addr)
+		flags |= MAP_FIXED_NOREPLACE;
+
+	mmap_write_lock(mm);
+	mapped_addr = do_mmap(NULL, addr, size, PROT_READ, flags,
+			      VM_SHADOW_STACK | VM_WRITE, 0, &unused, NULL);
+	mmap_write_unlock(mm);
+
+	return mapped_addr;
+}
+
+static unsigned long gcs_size(unsigned long size)
+{
+	if (size)
+		return PAGE_ALIGN(size);
+
+	/* Allocate RLIMIT_STACK/2 with limits of PAGE_SIZE..2G */
+	size = PAGE_ALIGN(min_t(unsigned long long,
+				rlimit(RLIMIT_STACK) / 2, SZ_2G));
+	return max(PAGE_SIZE, size);
+}
+
+static bool gcs_consume_token(struct mm_struct *mm, unsigned long user_addr)
+{
+	u64 expected = GCS_CAP(user_addr);
+	u64 val;
+	int ret;
+
+	/* This should really be an atomic cmpxchg.  It is not. */
+	ret = access_remote_vm(mm, user_addr, &val, sizeof(val),
+			       FOLL_FORCE);
+	if (ret != sizeof(val))
+		return false;
+
+	if (val != expected)
+		return false;
+
+	val = 0;
+	ret = access_remote_vm(mm, user_addr, &val, sizeof(val),
+			       FOLL_FORCE | FOLL_WRITE);
+	if (ret != sizeof(val))
+		return false;
+
+	return true;
+}
+
+int arch_shstk_post_fork(struct task_struct *tsk,
+			 struct kernel_clone_args *args)
+{
+	struct mm_struct *mm;
+	unsigned long addr, size, gcspr_el0;
+	int ret = 0;
+
+	mm = get_task_mm(tsk);
+	if (!mm)
+		return -EFAULT;
+
+	addr = args->shadow_stack;
+	size = args->shadow_stack_size;
+
+	/*
+	 * There should be a token, and there is likely to be an optional
+	 * end of stack marker above it.
+	 */
+	gcspr_el0 = addr + size - (2 * sizeof(u64));
+	if (!gcs_consume_token(mm, gcspr_el0)) {
+		gcspr_el0 += sizeof(u64);
+		if (!gcs_consume_token(mm, gcspr_el0)) {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	tsk->thread.gcspr_el0 = gcspr_el0 + sizeof(u64);
+
+out:
+	mmput(mm);
+
+	return ret;
+}
+
+unsigned long gcs_alloc_thread_stack(struct task_struct *tsk,
+				     const struct kernel_clone_args *args)
+{
+	unsigned long addr, size;
+
+	/* If the user specified a GCS use it. */
+	if (args->shadow_stack_size) {
+		if (!system_supports_gcs())
+			return (unsigned long)ERR_PTR(-EINVAL);
+
+		/* GCSPR_EL0 will be set up when verifying token post fork */
+		addr = args->shadow_stack;
+	} else {
+
+		/*
+		 * Otherwise fall back to legacy clone() support and
+		 * implicitly allocate a GCS if we need a new one.
+		 */
+
+		if (!system_supports_gcs())
+			return 0;
+
+		if (!task_gcs_el0_enabled(tsk))
+			return 0;
+
+		if ((args->flags & (CLONE_VFORK | CLONE_VM)) != CLONE_VM) {
+			tsk->thread.gcspr_el0 = read_sysreg_s(SYS_GCSPR_EL0);
+			return 0;
+		}
+
+		size = args->stack_size;
+
+		size = gcs_size(size);
+		addr = alloc_gcs(0, size);
+		if (IS_ERR_VALUE(addr))
+			return addr;
+
+		tsk->thread.gcs_base = addr;
+		tsk->thread.gcs_size = size;
+		tsk->thread.gcspr_el0 = addr + size - sizeof(u64);
+	}
+
+	return addr;
+}
+
 /*
  * Apply the GCS mode configured for the specified task to the
  * hardware.
@@ -30,6 +162,16 @@ void gcs_set_el0_mode(struct task_struct *task)
 
 void gcs_free(struct task_struct *task)
 {
+
+	/*
+	 * When fork() with CLONE_VM fails, the child (tsk) already
+	 * has a GCS allocated, and exit_thread() calls this function
+	 * to free it.  In this case the parent (current) and the
+	 * child share the same mm struct.
+	 */
+	if (!task->mm || task->mm != current->mm)
+		return;
+
 	if (task->thread.gcs_base)
 		vm_munmap(task->thread.gcs_base, task->thread.gcs_size);
 

@@ -574,6 +574,12 @@ struct kvm_vcpu_arch {
 	/* Virtual SError ESR to restore when HCR_EL2.VSE is set */
 	u64 vsesr_el2;
 
+	/* Fine grained traps values for the guest and host */
+	u64 hfgrtr_el2;
+	u64 hfgwtr_el2;
+	u64 hfgrtr_el2_host;
+	u64 hfgwtr_el2_host;
+
 	/* Additional reset state */
 	struct vcpu_reset_state	reset_state;
 

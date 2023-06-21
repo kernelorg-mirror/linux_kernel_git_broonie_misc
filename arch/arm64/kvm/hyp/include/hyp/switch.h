@@ -70,54 +70,26 @@ static inline void __activate_traps_fpsimd32(struct kvm_vcpu *vcpu)
 	}
 }
 
-static inline bool __hfgxtr_traps_required(void)
+static inline void __activate_traps_hfgxtr(struct kvm_vcpu *vcpu)
 {
-	if (cpus_have_final_cap(ARM64_SME))
-		return true;
+	if (!cpus_have_final_cap(ARM64_HAS_FGT))
+		return;
 
-	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38))
-		return true;
-
-	return false;
+	if (vcpu->arch.hfgrtr_el2_host != vcpu->arch.hfgrtr_el2)
+		write_sysreg_s(vcpu->arch.hfgrtr_el2, SYS_HFGRTR_EL2);
+	if (vcpu->arch.hfgwtr_el2_host != vcpu->arch.hfgwtr_el2)
+		write_sysreg_s(vcpu->arch.hfgwtr_el2,  SYS_HFGWTR_EL2);
 }
 
-static inline void __activate_traps_hfgxtr(void)
+static inline void __deactivate_traps_hfgxtr(struct kvm_vcpu *vcpu)
 {
-	u64 r_clr = 0, w_clr = 0, r_set = 0, w_set = 0, tmp;
+	if (!cpus_have_final_cap(ARM64_HAS_FGT))
+		return;
 
-	if (cpus_have_final_cap(ARM64_SME)) {
-		tmp = HFGxTR_EL2_nSMPRI_EL1_MASK | HFGxTR_EL2_nTPIDR2_EL0_MASK;
-
-		r_clr |= tmp;
-		w_clr |= tmp;
-	}
-
-	/*
-	 * Trap guest writes to TCR_EL1 to prevent it from enabling HA or HD.
-	 */
-	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38))
-		w_set |= HFGxTR_EL2_TCR_EL1_MASK;
-
-	sysreg_clear_set_s(SYS_HFGRTR_EL2, r_clr, r_set);
-	sysreg_clear_set_s(SYS_HFGWTR_EL2, w_clr, w_set);
-}
-
-static inline void __deactivate_traps_hfgxtr(void)
-{
-	u64 r_clr = 0, w_clr = 0, r_set = 0, w_set = 0, tmp;
-
-	if (cpus_have_final_cap(ARM64_SME)) {
-		tmp = HFGxTR_EL2_nSMPRI_EL1_MASK | HFGxTR_EL2_nTPIDR2_EL0_MASK;
-
-		r_set |= tmp;
-		w_set |= tmp;
-	}
-
-	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38))
-		w_clr |= HFGxTR_EL2_TCR_EL1_MASK;
-
-	sysreg_clear_set_s(SYS_HFGRTR_EL2, r_clr, r_set);
-	sysreg_clear_set_s(SYS_HFGWTR_EL2, w_clr, w_set);
+	if (vcpu->arch.hfgrtr_el2_host != vcpu->arch.hfgrtr_el2)
+		write_sysreg_s(vcpu->arch.hfgrtr_el2, SYS_HFGRTR_EL2);
+	if (vcpu->arch.hfgwtr_el2_host != vcpu->arch.hfgwtr_el2)
+		write_sysreg_s(vcpu->arch.hfgwtr_el2,  SYS_HFGWTR_EL2);
 }
 
 static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
@@ -145,8 +117,7 @@ static inline void __activate_traps_common(struct kvm_vcpu *vcpu)
 	vcpu->arch.mdcr_el2_host = read_sysreg(mdcr_el2);
 	write_sysreg(vcpu->arch.mdcr_el2, mdcr_el2);
 
-	if (__hfgxtr_traps_required())
-		__activate_traps_hfgxtr();
+	__activate_traps_hfgxtr(vcpu);
 }
 
 static inline void __deactivate_traps_common(struct kvm_vcpu *vcpu)
@@ -162,8 +133,7 @@ static inline void __deactivate_traps_common(struct kvm_vcpu *vcpu)
 		vcpu_clear_flag(vcpu, PMUSERENR_ON_CPU);
 	}
 
-	if (__hfgxtr_traps_required())
-		__deactivate_traps_hfgxtr();
+	__deactivate_traps_hfgxtr(vcpu);
 }
 
 static inline void ___activate_traps(struct kvm_vcpu *vcpu)

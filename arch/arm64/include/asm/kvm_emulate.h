@@ -108,6 +108,27 @@ static inline unsigned long *vcpu_hcr(struct kvm_vcpu *vcpu)
 	return (unsigned long *)&vcpu->arch.hcr_el2;
 }
 
+static inline void vcpu_reset_fgt(struct kvm_vcpu *vcpu)
+{
+	if (!cpus_have_const_cap(ARM64_HAS_FGT))
+		return;
+
+	vcpu->arch.hfgrtr_el2 = 0;
+	vcpu->arch.hfgwtr_el2 = 0;
+
+	/*
+	 * Trap guest writes to TCR_EL1 to prevent it from enabling HA or HD.
+	 */
+	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38)) {
+		vcpu->arch.hfgrtr_el2 |= HFGxTR_EL2_TCR_EL1_MASK;
+		vcpu->arch.hfgwtr_el2 |= HFGxTR_EL2_TCR_EL1_MASK;
+	}
+
+	/* We currently assume the host configuration never changes */
+	vcpu->arch.hfgrtr_el2_host = read_sysreg_s(SYS_HFGRTR_EL2);
+	vcpu->arch.hfgwtr_el2_host = read_sysreg_s(SYS_HFGWTR_EL2);
+}
+
 static inline void vcpu_clear_wfx_traps(struct kvm_vcpu *vcpu)
 {
 	vcpu->arch.hcr_el2 &= ~HCR_TWE;

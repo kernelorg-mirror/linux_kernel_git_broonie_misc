@@ -1845,10 +1845,20 @@ static int netsec_of_probe(struct platform_device *pdev,
 {
 	int err;
 
-	err = of_get_phy_mode(pdev->dev.of_node, &priv->phy_interface);
-	if (err) {
-		dev_err(&pdev->dev, "missing required property 'phy-mode'\n");
-		return err;
+	if (of_machine_is_compatible("socionext,developer-box")) {
+		/*
+		 * SynQuacer reports RGMII but is physically
+		 * configured with TX and RX delays, since the
+		 * firwmare configures the PHY prior to boot just
+		 * ignore the configuration.
+		 */
+		priv->phy_interface = PHY_INTERFACE_MODE_NA;
+	} else {
+		err = of_get_phy_mode(pdev->dev.of_node, &priv->phy_interface);
+		if (err) {
+			dev_err(&pdev->dev, "missing required property 'phy-mode'\n");
+			return err;
+		}
 	}
 
 	priv->phy_np = of_parse_phandle(pdev->dev.of_node, "phy-handle", 0);

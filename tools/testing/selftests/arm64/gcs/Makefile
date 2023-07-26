@@ -6,7 +6,8 @@
 # nolibc.
 #
 
-TEST_GEN_PROGS := basic-gcs libc-gcs gcs-locking
+TEST_GEN_PROGS := basic-gcs libc-gcs gcs-locking gcs-stress
+TEST_GEN_PROGS_EXTENDED := gcs-stress-thread
 
 LDLIBS+=-lpthread
 
@@ -17,3 +18,6 @@ $(OUTPUT)/basic-gcs: basic-gcs.c
 		-static -include ../../../../include/nolibc/nolibc.h \
 		-std=gnu99 -I../.. -g \
 		-ffreestanding -Wall $^ -o $@ -lgcc
+
+$(OUTPUT)/gcs-stress-thread: gcs-stress-thread.S
+	$(CC) -nostdlib $^ -o $@

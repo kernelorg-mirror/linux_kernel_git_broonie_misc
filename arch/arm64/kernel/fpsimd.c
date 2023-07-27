@@ -1189,11 +1189,11 @@ u64 read_zcr_features(void)
 	write_sysreg_s(ZCR_ELx_LEN_MASK, SYS_ZCR_EL1);
 
 	zcr = read_sysreg_s(SYS_ZCR_EL1);
-	zcr &= ~(u64)ZCR_ELx_LEN_MASK; /* find sticky 1s outside LEN field */
+	zcr &= ~(u64)ZCR_ELx_LEN_MASK;
 	vq_max = sve_vq_from_vl(sve_get_vl());
 	zcr |= vq_max - 1; /* set LEN field to maximum effective value */
 
-	return zcr;
+	return SYS_FIELD_GET(ZCR_ELx, LEN, zcr);
 }
 
 void __init sve_setup(void)
@@ -1364,7 +1364,7 @@ u64 read_smcr_features(void)
 	vq_max = sve_vq_from_vl(sme_get_vl());
 	smcr |= vq_max - 1; /* set LEN field to maximum effective value */
 
-	return smcr;
+	return SYS_FIELD_GET(SMCR_ELx, LEN, smcr);
 }
 
 void __init sme_setup(void)

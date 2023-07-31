@@ -411,6 +411,52 @@ static void handle_host_smc(struct kvm_cpu_context *host_ctxt)
 	kvm_skip_host_instr();
 }
 
+static void handle_host_vec(void)
+{
+	u64 old_smcr, new_smcr;
+	u64 mask = 0;
+
+	/*
+	 * Handle lazy restore of the EL2 configuration for host SVE
+	 * and SME usage.  It is likely that when a host supports both
+	 * SVE and SME it will use both in quick succession (eg,
+	 * saving guest state) so we restore both when either traps.
+	 */
+	if (has_hvhe()) {
+		if (cpus_have_final_cap(ARM64_SVE))
+			mask |= CPACR_EL1_ZEN_EL1EN | CPACR_EL1_ZEN_EL0EN;
+		if (cpus_have_final_cap(ARM64_SME))
+			mask |= CPACR_EL1_SMEN_EL1EN | CPACR_EL1_SMEN_EL0EN;
+
+		sysreg_clear_set(cpacr_el1, 0, mask);
+	} else {
+		if (cpus_have_final_cap(ARM64_SVE))
+			mask |= CPTR_EL2_TZ;
+		if (cpus_have_final_cap(ARM64_SME))
+			mask |= CPTR_EL2_TSM;
+
+		sysreg_clear_set(cptr_el2, mask, 0);
+	}
+
+	isb();
+
+	if (cpus_have_final_cap(ARM64_SVE))
+		sve_cond_update_zcr_vq(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
+
+	if (cpus_have_final_cap(ARM64_SME)) {
+		old_smcr = read_sysreg_s(SYS_SMCR_EL2);
+		new_smcr = SMCR_ELx_LEN_MASK;
+
+		if (cpus_have_final_cap(ARM64_SME_FA64))
+			new_smcr |= SMCR_ELx_FA64_MASK;
+		if (cpus_have_final_cap(ARM64_SME2))
+			new_smcr |= SMCR_ELx_EZT0_MASK;
+
+		if (old_smcr != new_smcr)
+			write_sysreg_s(new_smcr, SYS_SMCR_EL2);
+	}
+}
+
 void handle_trap(struct kvm_cpu_context *host_ctxt)
 {
 	u64 esr = read_sysreg_el2(SYS_ESR);
@@ -423,14 +469,8 @@ void handle_trap(struct kvm_cpu_context *host_ctxt)
 		handle_host_smc(host_ctxt);
 		break;
 	case ESR_ELx_EC_SVE:
-		/* Handle lazy restore of the host VL */
-		if (has_hvhe())
-			sysreg_clear_set(cpacr_el1, 0, (CPACR_EL1_ZEN_EL1EN |
-							CPACR_EL1_ZEN_EL0EN));
-		else
-			sysreg_clear_set(cptr_el2, CPTR_EL2_TZ, 0);
-		isb();
-		sve_cond_update_zcr_vq(ZCR_ELx_LEN_MASK, SYS_ZCR_EL2);
+	case ESR_ELx_EC_SME:
+		handle_host_vec();
 		break;
 	case ESR_ELx_EC_IABT_LOW:
 	case ESR_ELx_EC_DABT_LOW:

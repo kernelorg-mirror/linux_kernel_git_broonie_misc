@@ -46,19 +46,14 @@ static void __activate_traps(struct kvm_vcpu *vcpu)
 	val = vcpu->arch.cptr_el2;
 	val |= CPTR_EL2_TAM;	/* Same bit irrespective of E2H */
 	val |= has_hvhe() ? CPACR_EL1_TTA : CPTR_EL2_TTA;
-	if (cpus_have_final_cap(ARM64_SME)) {
-		if (has_hvhe())
-			val &= ~(CPACR_EL1_SMEN_EL1EN | CPACR_EL1_SMEN_EL0EN);
-		else
-			val |= CPTR_EL2_TSM;
-	}
 
 	if (!guest_owns_fp_regs(vcpu)) {
 		if (has_hvhe())
 			val &= ~(CPACR_EL1_FPEN_EL0EN | CPACR_EL1_FPEN_EL1EN |
-				 CPACR_EL1_ZEN_EL0EN | CPACR_EL1_ZEN_EL1EN);
+				 CPACR_EL1_ZEN_EL0EN | CPACR_EL1_ZEN_EL1EN |
+				 CPACR_EL1_SMEN_EL0EN | CPACR_EL1_SMEN_EL1EN);
 		else
-			val |= CPTR_EL2_TFP | CPTR_EL2_TZ;
+			val |= CPTR_EL2_TFP | CPTR_EL2_TZ | CPTR_EL2_TSM;
 
 		__activate_traps_fpsimd32(vcpu);
 	}
@@ -186,6 +181,7 @@ static const exit_handler_fn hyp_exit_handlers[] = {
 	[0 ... ESR_ELx_EC_MAX]		= NULL,
 	[ESR_ELx_EC_CP15_32]		= kvm_hyp_handle_cp15_32,
 	[ESR_ELx_EC_SYS64]		= kvm_hyp_handle_sysreg,
+	[ESR_ELx_EC_SME]		= kvm_hyp_handle_fpsimd,
 	[ESR_ELx_EC_SVE]		= kvm_hyp_handle_fpsimd,
 	[ESR_ELx_EC_FP_ASIMD]		= kvm_hyp_handle_fpsimd,
 	[ESR_ELx_EC_IABT_LOW]		= kvm_hyp_handle_iabt_low,
@@ -198,6 +194,7 @@ static const exit_handler_fn hyp_exit_handlers[] = {
 static const exit_handler_fn pvm_exit_handlers[] = {
 	[0 ... ESR_ELx_EC_MAX]		= NULL,
 	[ESR_ELx_EC_SYS64]		= kvm_handle_pvm_sys64,
+	[ESR_ELx_EC_SME]		= kvm_handle_pvm_restricted,
 	[ESR_ELx_EC_SVE]		= kvm_handle_pvm_restricted,
 	[ESR_ELx_EC_FP_ASIMD]		= kvm_hyp_handle_fpsimd,
 	[ESR_ELx_EC_IABT_LOW]		= kvm_hyp_handle_iabt_low,

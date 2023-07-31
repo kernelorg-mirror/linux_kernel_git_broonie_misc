@@ -207,6 +207,16 @@ static int handle_sve(struct kvm_vcpu *vcpu)
 }
 
 /*
+ * Guest access to SME registers should be routed to this handler only
+ * when the system doesn't support SME.
+ */
+static int handle_sme(struct kvm_vcpu *vcpu)
+{
+	kvm_inject_undefined(vcpu);
+	return 1;
+}
+
+/*
  * Guest usage of a ptrauth instruction (which the guest EL1 did not turn into
  * a NOP). If we get here, it is that we didn't fixup ptrauth on exit, and all
  * that we can do is give the guest an UNDEF.
@@ -268,6 +278,7 @@ static exit_handle_fn arm_exit_handlers[] = {
 	[ESR_ELx_EC_SVC64]	= handle_svc,
 	[ESR_ELx_EC_SYS64]	= kvm_handle_sys_reg,
 	[ESR_ELx_EC_SVE]	= handle_sve,
+	[ESR_ELx_EC_SME]	= handle_sme,
 	[ESR_ELx_EC_ERET]	= kvm_handle_eret,
 	[ESR_ELx_EC_IABT_LOW]	= kvm_handle_guest_abort,
 	[ESR_ELx_EC_DABT_LOW]	= kvm_handle_guest_abort,

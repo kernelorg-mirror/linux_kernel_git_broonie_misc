@@ -332,6 +332,15 @@ static inline void sve_load_state(const struct arm64_sve_state *state, bool ffr)
 	__sve_load_p(state, vl, ffr);
 }
 
+static inline void sve_flush_p(void)
+{
+	asm volatile(
+	__SVE_PREAMBLE
+	FOR_EACH_P_REG("n", "pfalse	p\\n\\().b")
+	"	wrffr	p0.b\n"
+	);
+}
+
 /*
  * Zero all SVE registers except for the first 128 bits of each vector.
  *
@@ -349,11 +358,7 @@ static inline void sve_flush_live(void)
 		);
 	}
 
-	asm volatile(
-	__SVE_PREAMBLE
-	FOR_EACH_P_REG("n", "pfalse	p\\n\\().b")
-	"	wrffr	p0.b\n"
-	);
+	sve_flush_p();
 }
 
 struct arm64_cpu_capabilities;

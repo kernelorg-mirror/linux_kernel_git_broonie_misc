@@ -85,6 +85,21 @@ SYM_FUNC_START(sve_flush_live)
 2:	ret
 SYM_FUNC_END(sve_flush_live)
 
+/*
+ * Zero the predicate registers
+ *
+ * VQ must already be configured by caller, any further updates of VQ
+ * will need to ensure that the register state remains valid.
+ *
+ * x0 = include FFR?
+ */
+SYM_FUNC_START(sve_flush_p)
+	sve_flush_p
+	tbz		x0, #0, 1f
+	sve_flush_ffr
+1:	ret
+SYM_FUNC_END(sve_flush_p)
+
 #endif /* CONFIG_ARM64_SVE */
 
 #ifdef CONFIG_ARM64_SME

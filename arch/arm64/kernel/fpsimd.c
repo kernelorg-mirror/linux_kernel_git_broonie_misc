@@ -381,6 +381,7 @@ static void task_fpsimd_load(void)
 {
 	bool restore_sve_regs = false;
 	bool restore_ffr;
+	unsigned long sve_vq_minus_one;
 
 	WARN_ON(!system_supports_fpsimd());
 	WARN_ON(!have_cpu_fpsimd_context());
@@ -388,17 +389,11 @@ static void task_fpsimd_load(void)
 	if (system_supports_sve() || system_supports_sme()) {
 		switch (current->thread.fp_type) {
 		case FP_STATE_FPSIMD:
-			/* Stop tracking SVE for this task until next use. */
-			if (test_and_clear_thread_flag(TIF_SVE))
-				sve_user_disable();
 			break;
 		case FP_STATE_SVE:
 			if (!thread_sm_enabled(&current->thread) &&
 			    !WARN_ON_ONCE(!test_and_set_thread_flag(TIF_SVE)))
 				sve_user_enable();
-
-			if (test_thread_flag(TIF_SVE))
-				sve_set_vq(sve_vq_from_vl(task_get_sve_vl(current)) - 1);
 
 			restore_sve_regs = true;
 			restore_ffr = true;
@@ -416,6 +411,15 @@ static void task_fpsimd_load(void)
 			clear_thread_flag(TIF_SVE);
 			break;
 		}
+	}
+
+	/*
+	 * If SVE has been enabled we may keep it enabled even if
+	 * loading only FPSIMD state, so always set the VL.
+	 */
+	if (system_supports_sve() && test_thread_flag(TIF_SVE)) {
+		sve_vq_minus_one = sve_vq_from_vl(task_get_sve_vl(current)) - 1;
+		sve_set_vq(sve_vq_minus_one);
 	}
 
 	/* Restore SME, override SVE register configuration if needed */
@@ -444,6 +448,25 @@ static void task_fpsimd_load(void)
 	} else {
 		WARN_ON_ONCE(current->thread.fp_type != FP_STATE_FPSIMD);
 		fpsimd_load_state(&current->thread.uw.fpsimd_state);
+
+		/*
+		 * If the task had been using SVE we keep it enabled
+		 * when loading FPSIMD only state for a number of
+		 * times to minimise overhead for tasks actively using
+		 * SVE, disabling it periodicaly to enusre that tasks
+		 * that use SVE intermittently do eventually avoid the
+		 * overhead of carrying SVE state.  The timeout is
+		 * initialised when we take a SVE trap in in do_sve_acc().
+		 */
+		if (system_supports_sve() && test_thread_flag(TIF_SVE)) {
+			if (!current->thread.sve_timeout) {
+				clear_thread_flag(TIF_SVE);
+				sve_user_disable();
+			} else {
+				current->thread.sve_timeout--;
+				sve_flush_live(true, sve_vq_minus_one);
+			}
+		}
 	}
 }
 
@@ -1457,6 +1480,13 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 
 	get_cpu_fpsimd_context();
 
+	/*
+	 * We will keep SVE enabled when loading FPSIMD only state
+	 * this many times to minimise traps when userspace is
+	 * actively using SVE.
+	 */
+	current->thread.sve_timeout = 64;
+
 	if (test_and_set_thread_flag(TIF_SVE))
 		WARN_ON(1); /* SVE access shouldn't have trapped */
 
@@ -1640,6 +1670,7 @@ void fpsimd_flush_thread(void)
 		/* Defer kfree() while in atomic context */
 		sve_state = current->thread.sve_state;
 		current->thread.sve_state = NULL;
+		current->thread.sve_timeout = 0;
 
 		fpsimd_flush_thread_vl(ARM64_VEC_SVE);
 	}

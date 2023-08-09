@@ -881,6 +881,14 @@ static int sve_set_common(struct task_struct *target,
 			break;
 		case ARM64_VEC_SME:
 			target->thread.svcr |= SVCR_SM_MASK;
+
+			/*
+			 * Disable tramsp and ensure there is SME
+			 * storage but preserve any currently set
+			 * values in ZA/ZT.
+			 */
+			sme_alloc(target, false);
+			set_tsk_thread_flag(target, TIF_SME);
 			break;
 		default:
 			WARN_ON_ONCE(1);
@@ -1100,7 +1108,7 @@ static int za_set(struct task_struct *target,
 	}
 
 	/* Allocate/reinit ZA storage */
-	sme_alloc(target);
+	sme_alloc(target, true);
 	if (!target->thread.sme_state) {
 		ret = -ENOMEM;
 		goto out;
@@ -1171,7 +1179,7 @@ static int zt_set(struct task_struct *target,
 		return -EINVAL;
 
 	if (!thread_za_enabled(&target->thread)) {
-		sme_alloc(target);
+		sme_alloc(target, true);
 		if (!target->thread.sme_state)
 			return -ENOMEM;
 	}

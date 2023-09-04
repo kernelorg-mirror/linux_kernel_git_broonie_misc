@@ -26,11 +26,14 @@ void __kvm_hyp_host_forward_smc(struct kvm_cpu_context *host_ctxt);
 static void flush_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 {
 	struct kvm_vcpu *host_vcpu = hyp_vcpu->host_vcpu;
+	int i;
 
 	hyp_vcpu->vcpu.arch.ctxt	= host_vcpu->arch.ctxt;
 
+	for (i = 0; i < ARRAY_SIZE(hyp_vcpu->vcpu.arch.max_vl); i++)
+		hyp_vcpu->vcpu.arch.max_vl[i] = host_vcpu->arch.max_vl[i];
+
 	hyp_vcpu->vcpu.arch.sve_state	= kern_hyp_va(host_vcpu->arch.sve_state);
-	hyp_vcpu->vcpu.arch.sve_max_vl	= host_vcpu->arch.sve_max_vl;
 
 	hyp_vcpu->vcpu.arch.hw_mmu	= host_vcpu->arch.hw_mmu;
 

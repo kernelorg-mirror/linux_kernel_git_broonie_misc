@@ -403,7 +403,7 @@ static void pkvm_vcpu_init_sve(struct pkvm_hyp_vcpu *hyp_vcpu, struct kvm_vcpu *
 	struct kvm_vcpu *vcpu = &hyp_vcpu->vcpu;
 
 	if (!vcpu_has_feature(vcpu, KVM_ARM_VCPU_SVE))
-		vcpu_clear_flag(vcpu, VCPU_SVE_FINALIZED);
+		vcpu_clear_flag(vcpu, VCPU_VEC_FINALIZED);
 }
 
 static int init_pkvm_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu,

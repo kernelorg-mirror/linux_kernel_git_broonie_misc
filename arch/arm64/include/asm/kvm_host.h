@@ -795,6 +795,8 @@ struct kvm_vcpu_arch {
 
 #define vcpu_sme_max_vq(vcpu)	vcpu_vec_max_vq(ARM64_VEC_SME, vcpu)
 
+int vcpu_max_vq(struct kvm_vcpu *vcpu);
+
 #define vcpu_sve_state_size(vcpu) ({					\
 	size_t __size_ret;						\
 	unsigned int __vcpu_vq;						\
@@ -802,7 +804,7 @@ struct kvm_vcpu_arch {
 	if (WARN_ON(!sve_vl_valid((vcpu)->arch.max_vl[ARM64_VEC_SVE]))) { \
 		__size_ret = 0;						\
 	} else {							\
-		__vcpu_vq = vcpu_sve_max_vq(vcpu);			\
+		__vcpu_vq = vcpu_max_vq(vcpu);				\
 		__size_ret = SVE_SIG_REGS_SIZE(__vcpu_vq);		\
 	}								\
 									\

@@ -14,6 +14,24 @@
 #include <asm/kvm_mmu.h>
 #include <asm/sysreg.h>
 
+/* We present Z and P to userspace with the maximum of the SVE or SME VL */
+int vcpu_max_vq(struct kvm_vcpu *vcpu)
+{
+	int sve, sme;
+
+	if (vcpu_has_sve(vcpu))
+		sve = vcpu_sve_max_vq(vcpu);
+	else
+		sve = 0;
+
+	if (vcpu_has_sme(vcpu))
+		sme = vcpu_sme_max_vq(vcpu);
+	else
+		sme = 0;
+
+	return max(sve, sme);
+}
+
 void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu)
 {
 	struct task_struct *p = vcpu->arch.parent_task;

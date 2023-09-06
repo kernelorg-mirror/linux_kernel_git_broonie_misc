@@ -704,8 +704,8 @@ struct kvm_vcpu_arch {
 
 /* SVE exposed to guest */
 #define GUEST_HAS_SVE		__vcpu_single_flag(cflags, BIT(0))
-/* SVE config completed */
-#define VCPU_SVE_FINALIZED	__vcpu_single_flag(cflags, BIT(1))
+/* SVE/SME config completed */
+#define VCPU_VEC_FINALIZED	__vcpu_single_flag(cflags, BIT(1))
 /* PTRAUTH exposed to guest */
 #define GUEST_HAS_PTRAUTH	__vcpu_single_flag(cflags, BIT(2))
 /* KVM_ARM_VCPU_INIT completed */
@@ -792,6 +792,8 @@ struct kvm_vcpu_arch {
 			     vcpu_get_flag(vcpu, GUEST_HAS_SME2))
 #define vcpu_has_fa64(vcpu) (system_supports_fa64() &&			\
 			     vcpu_get_flag(vcpu, GUEST_HAS_FA64))
+
+#define vcpu_has_vec(vcpu) (vcpu_has_sve(vcpu) || vcpu_has_sme(vcpu))
 
 #ifdef CONFIG_ARM64_PTR_AUTH
 #define vcpu_has_ptrauth(vcpu)						\
@@ -1179,7 +1181,7 @@ static inline bool kvm_vm_is_protected(struct kvm *kvm)
 int kvm_arm_vcpu_finalize(struct kvm_vcpu *vcpu, int feature);
 bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu);
 
-#define kvm_arm_vcpu_sve_finalized(vcpu) vcpu_get_flag(vcpu, VCPU_SVE_FINALIZED)
+#define kvm_arm_vcpu_vec_finalized(vcpu) vcpu_get_flag(vcpu, VCPU_VEC_FINALIZED)
 
 #define kvm_has_mte(kvm)					\
 	(system_supports_mte() &&				\

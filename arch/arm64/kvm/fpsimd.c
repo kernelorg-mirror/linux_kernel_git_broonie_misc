@@ -14,6 +14,24 @@
 #include <asm/kvm_mmu.h>
 #include <asm/sysreg.h>
 
+/* We present Z and P to userspace with the maximum of the SVE or SME VL */
+int vcpu_max_vq(struct kvm_vcpu *vcpu)
+{
+	int sve, sme;
+
+	if (vcpu_has_sve(vcpu))
+		sve = vcpu_sve_max_vq(vcpu);
+	else
+		sve = 0;
+
+	if (vcpu_has_sme(vcpu))
+		sme = vcpu_sme_max_vq(vcpu);
+	else
+		sme = 0;
+
+	return max(sve, sme);
+}
+
 void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu)
 {
 	struct task_struct *p = vcpu->arch.parent_task;
@@ -65,6 +83,159 @@ int kvm_arch_vcpu_run_map_fp(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
+static bool vcpu_fp_user_format_needed(struct kvm_vcpu *vcpu)
+{
+	/* Only systems with SME need rewrites */
+	if (!system_supports_sme())
+		return false;
+
+	/*
+	 * If we have both SVE and SME and the two VLs are the same
+	 * and no rewrite is needed.
+	 */
+	if (vcpu_has_sve(vcpu) &&
+	    (vcpu_sve_max_vq(vcpu) == vcpu_sme_max_vq(vcpu)))
+		return false;
+
+	return true;
+}
+
+static bool vcpu_sm_active(struct kvm_vcpu *vcpu)
+{
+	return __vcpu_sys_reg(vcpu, SVCR) & SVCR_SM;
+}
+
+static int vcpu_active_vq(struct kvm_vcpu *vcpu)
+{
+	if (vcpu_sm_active(vcpu))
+		return vcpu_sme_max_vq(vcpu);
+	else
+		return vcpu_sve_max_vq(vcpu);
+}
+
+static void *buf_zreg(void *buf, int vq, int reg)
+{
+	return buf + __SVE_ZREG_OFFSET(vq, reg) - __SVE_ZREGS_OFFSET;
+}
+
+static void *buf_preg(void *buf, int vq, int reg)
+{
+	return buf + __SVE_PREG_OFFSET(vq, reg) - __SVE_ZREGS_OFFSET;
+}
+
+static void vcpu_rewrite_sve(struct kvm_vcpu *vcpu, int vq_in, int vq_out)
+{
+	void *new_buf;
+	int copy_size, i;
+
+	new_buf = kzalloc(vcpu_sve_state_size(vcpu), GFP_KERNEL);
+	if (!new_buf)
+		return;
+
+	if (WARN_ON_ONCE(vq_in == vq_out))
+		return;
+
+	/* Z registers */
+	if (vq_in < vq_out)
+		copy_size = vq_in * __SVE_VQ_BYTES;
+	else
+		copy_size = vq_out * __SVE_VQ_BYTES;
+
+	for (i = 0; i < SVE_NUM_ZREGS; i++)
+		memcpy(buf_zreg(new_buf, vq_out, i),
+		       buf_zreg(vcpu->arch.sve_state, vq_in, i),
+		       copy_size);
+
+	/* P and FFR, FFR is stored as an additional P */
+	copy_size /= 8;
+	for (i = 0; i <= SVE_NUM_PREGS; i++)
+		memcpy(buf_preg(new_buf, vq_out, i),
+		       buf_preg(vcpu->arch.sve_state, vq_in, i),
+		       copy_size);
+
+	/*
+	 * Ideally we would unmap the existing SVE buffer and remap
+	 * the new one.
+	 */
+	memcpy(vcpu->arch.sve_state, new_buf, vcpu_sve_state_size(vcpu));
+	kfree(new_buf);
+}
+
+/*
+ * If both SVE and SME are supported we present userspace with the SVE
+ * Z, P and FFR registers configured with the larger of the SVE and
+ * SME vector length, and if we have SME then even without SVE we
+ * present the V registers via Z.
+ */
+static void vcpu_fp_user_to_guest(struct kvm_vcpu *vcpu)
+{
+	if (likely(vcpu->arch.fp_state != FP_STATE_USER_OWNED))
+		return;
+
+	if (!vcpu_fp_user_format_needed(vcpu)) {
+		vcpu->arch.fp_state = FP_STATE_FREE;
+		return;
+	}
+
+	if (vcpu_has_sve(vcpu)) {
+		/*
+		 * The register state is stored in SVE format, rewrite
+		 * from the larger VL to the one the guest is
+		 * currently using.
+		 */
+		if (vcpu_active_vq(vcpu) != vcpu_max_vq(vcpu))
+			vcpu_rewrite_sve(vcpu, vcpu_max_vq(vcpu),
+					 vcpu_active_vq(vcpu));
+	} else {
+		/*
+		 * A FPSIMD only system will store non-streaming guest
+		 * state in FPSIMD format when running the guest but
+		 * present to userspace via the SVE regset.
+		 */
+		if (!vcpu_sm_active(vcpu))
+			__sve_to_fpsimd(&vcpu->arch.ctxt.fp_regs,
+					vcpu->arch.sve_state,
+					vcpu_sme_max_vq(vcpu));
+	}
+
+	vcpu->arch.fp_state = FP_STATE_FREE;
+}
+
+void vcpu_fp_guest_to_user(struct kvm_vcpu *vcpu)
+{
+	if (vcpu->arch.fp_state == FP_STATE_USER_OWNED)
+		return;
+
+	if (!vcpu_fp_user_format_needed(vcpu))
+		return;
+
+	if (vcpu_has_sve(vcpu)) {
+		/*
+		 * The register state is stored in SVE format, rewrite
+		 * to the largest VL.
+		 */
+		if (vcpu_active_vq(vcpu) != vcpu_max_vq(vcpu))
+			vcpu_rewrite_sve(vcpu, vcpu_active_vq(vcpu),
+					 vcpu_max_vq(vcpu));
+	} else {
+		/*
+		 * A FPSIMD only system will store non-streaming guest
+		 * state in FPSIMD format when running the guest but
+		 * present to userspace via the SVE regset, rewrite
+		 * with zero padding.
+		 */
+		if (!vcpu_sm_active(vcpu)) {
+			memset(vcpu->arch.sve_state, 0,
+			       vcpu_sve_state_size(vcpu));
+			__fpsimd_to_sve(vcpu->arch.sve_state,
+					&vcpu->arch.ctxt.fp_regs,
+					vcpu_sme_max_vq(vcpu));
+		}
+	}
+
+	vcpu->arch.fp_state = FP_STATE_USER_OWNED;
+}
+
 /*
  * Prepare vcpu for saving the host's FPSIMD state and loading the guest's.
  * The actual loading is done by the FPSIMD access trap taken to hyp.
@@ -80,6 +251,8 @@ void kvm_arch_vcpu_load_fp(struct kvm_vcpu *vcpu)
 		return;
 
 	fpsimd_kvm_prepare();
+
+	vcpu_fp_user_to_guest(vcpu);
 
 	/*
 	 * We will check TIF_FOREIGN_FPSTATE just before entering the

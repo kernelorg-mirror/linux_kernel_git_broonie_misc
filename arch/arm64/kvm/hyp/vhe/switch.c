@@ -58,6 +58,8 @@ static void __activate_traps(struct kvm_vcpu *vcpu)
 	if (guest_owns_fp_regs(vcpu)) {
 		if (vcpu_has_sve(vcpu))
 			val |= CPACR_EL1_ZEN_EL0EN | CPACR_EL1_ZEN_EL1EN;
+		if (vcpu_has_sme(vcpu))
+			val |= CPACR_EL1_SMEN_EL0EN | CPACR_EL1_SMEN_EL1EN;
 	} else {
 		val &= ~(CPACR_EL1_FPEN_EL0EN | CPACR_EL1_FPEN_EL1EN);
 		__activate_traps_fpsimd32(vcpu);

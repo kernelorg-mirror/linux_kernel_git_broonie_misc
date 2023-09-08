@@ -596,7 +596,10 @@ static __always_inline u64 kvm_get_reset_cptr_el2(struct kvm_vcpu *vcpu)
 		    (!vcpu_has_sve(vcpu) ||
 		     (vcpu->arch.fp_state != FP_STATE_GUEST_OWNED)))
 			val |= CPACR_EL1_ZEN_EL1EN | CPACR_EL1_ZEN_EL0EN;
-		if (cpus_have_final_cap(ARM64_SME))
+
+		if (cpus_have_final_cap(ARM64_SME) &&
+		    (!vcpu_has_sme(vcpu) ||
+		     (vcpu->arch.fp_state != FP_STATE_GUEST_OWNED)))
 			val |= CPACR_EL1_SMEN_EL1EN | CPACR_EL1_SMEN_EL0EN;
 	} else {
 		val = CPTR_NVHE_EL2_RES1;
@@ -604,8 +607,9 @@ static __always_inline u64 kvm_get_reset_cptr_el2(struct kvm_vcpu *vcpu)
 		if (vcpu_has_sve(vcpu) &&
 		    (vcpu->arch.fp_state == FP_STATE_GUEST_OWNED))
 			val |= CPTR_EL2_TZ;
-		if (cpus_have_final_cap(ARM64_SME))
-			val &= ~CPTR_EL2_TSM;
+		if (vcpu_has_sme(vcpu) &&
+		    (vcpu->arch.fp_state == FP_STATE_GUEST_OWNED))
+			val |= CPTR_EL2_TSM;
 	}
 
 	return val;

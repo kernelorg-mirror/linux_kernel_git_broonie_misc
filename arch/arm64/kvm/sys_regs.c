@@ -1412,13 +1412,6 @@ static u64 __kvm_read_sanitised_id_reg(const struct kvm_vcpu *vcpu,
 	val = read_sanitised_ftr_reg(id);
 
 	switch (id) {
-	case SYS_ID_AA64PFR1_EL1:
-		if (!kvm_has_mte(vcpu->kvm))
-			val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_MTE);
-
-		if (!vcpu_has_sme(vcpu))
-			val &= ~ID_AA64PFR1_EL1_SME_MASK;
-		break;
 	case SYS_ID_AA64ISAR1_EL1:
 		if (!vcpu_has_ptrauth(vcpu))
 			val &= ~(ARM64_FEATURE_MASK(ID_AA64ISAR1_EL1_APA) |
@@ -1578,6 +1571,20 @@ static u64 read_sanitised_id_aa64pfr0_el1(struct kvm_vcpu *vcpu,
 	}
 
 	val &= ~ID_AA64PFR0_EL1_AMU_MASK;
+
+	return val;
+}
+
+static u64 read_sanitised_id_aa64pfr1_el1(struct kvm_vcpu *vcpu,
+					  const struct sys_reg_desc *rd)
+{
+	u64 val = read_sanitised_ftr_reg(SYS_ID_AA64PFR1_EL1);
+
+	if (!vcpu_has_sme(vcpu))
+		val &= ~ID_AA64PFR1_EL1_SME_MASK;
+
+	if (!kvm_has_mte(vcpu->kvm))
+		val &= ~ARM64_FEATURE_MASK(ID_AA64PFR1_EL1_MTE);
 
 	return val;
 }
@@ -2164,7 +2171,14 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 		   ID_AA64PFR0_EL1_GIC |
 		   ID_AA64PFR0_EL1_AdvSIMD |
 		   ID_AA64PFR0_EL1_FP), },
-	ID_SANITISED(ID_AA64PFR1_EL1),
+	{ SYS_DESC(SYS_ID_AA64PFR1_EL1),
+	  .access = access_id_reg,
+	  .get_user = get_id_reg,
+	  .set_user = set_id_reg,
+	  .reset = read_sanitised_id_aa64pfr1_el1,
+	  .val = ~(ID_AA64PFR1_EL1_MPAM_frac |
+		   ID_AA64PFR1_EL1_RAS_frac |
+		   ID_AA64PFR1_EL1_MTE), },
 	ID_UNALLOCATED(4,2),
 	ID_UNALLOCATED(4,3),
 	ID_WRITABLE(ID_AA64ZFR0_EL1, ~ID_AA64ZFR0_EL1_RES0),

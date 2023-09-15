@@ -85,42 +85,125 @@ static void kvm_vcpu_enable_sve(struct kvm_vcpu *vcpu)
 	vcpu_set_flag(vcpu, GUEST_HAS_SVE);
 }
 
+int __init kvm_arm_init_sme(void)
+{
+	if (system_supports_sme()) {
+		kvm_vec_max_vl[ARM64_VEC_SME] = sme_max_virtualisable_vl();
+
+		/*
+		 * The get_sve_reg()/set_sve_reg() ioctl interface will need
+		 * to be extended with multiple register slice support in
+		 * order to support vector lengths greater than
+		 * VL_ARCH_MAX:
+		 */
+		if (WARN_ON(kvm_vec_max_vl[ARM64_VEC_SME] > VL_ARCH_MAX))
+			kvm_vec_max_vl[ARM64_VEC_SME] = VL_ARCH_MAX;
+
+		/*
+		 * Don't even try to make use of vector lengths that
+		 * aren't available on all CPUs, for now:
+		 */
+		if (kvm_vec_max_vl[ARM64_VEC_SME] < sme_max_vl())
+			pr_warn("KVM: SME vector length for guests limited to %u bytes\n",
+				kvm_vec_max_vl[ARM64_VEC_SME]);
+	}
+
+	return 0;
+}
+
+static int kvm_vcpu_enable_sme(struct kvm_vcpu *vcpu)
+{
+	vcpu->arch.max_vl[ARM64_VEC_SME] = kvm_vec_max_vl[ARM64_VEC_SME];
+
+	/*
+	 * Userspace can still customize the vector lengths by writing
+	 * KVM_REG_ARM64_SME_VLS.  Allocation is deferred until
+	 * kvm_arm_vcpu_finalize(), which freezes the configuration.
+	 */
+	vcpu_set_flag(vcpu, GUEST_HAS_SME);
+
+	return 0;
+}
+
+
 /*
- * Finalize vcpu's maximum SVE vector length, allocating
- * vcpu->arch.sve_state as necessary.
+ * Finalize vcpu's maximum SVE/SME vector lengths, allocating
+ * vcpu->arch.sve_state and vcpu->arch.sme_state as necessary.
  */
 static int kvm_vcpu_finalize_vec(struct kvm_vcpu *vcpu)
 {
-	void *buf;
 	unsigned int vl;
-	size_t reg_sz;
+	void *sve_buf, *sme_buf;
+	size_t sve_sz, sme_sz;
 	int ret;
 
-	vl = vcpu->arch.max_vl[ARM64_VEC_SVE];
+	/* Both SVE and SME need the SVE state */
 
-	/*
+        /*
 	 * Responsibility for these properties is shared between
 	 * kvm_arm_init_sve(), kvm_vcpu_enable_sve() and
 	 * set_sve_vls().  Double-check here just to be sure:
 	 */
+	vl = vcpu->arch.max_vl[ARM64_VEC_SVE];
 	if (WARN_ON(!sve_vl_valid(vl) || vl > sve_max_virtualisable_vl() ||
 		    vl > VL_ARCH_MAX))
 		return -EIO;
 
-	reg_sz = vcpu_sve_state_size(vcpu);
-	buf = kzalloc(reg_sz, GFP_KERNEL_ACCOUNT);
-	if (!buf)
+	sve_sz = vcpu_sve_state_size(vcpu);
+	sve_buf = kzalloc(sve_sz, GFP_KERNEL_ACCOUNT);
+	if (!sve_buf)
 		return -ENOMEM;
 
-	ret = kvm_share_hyp(buf, buf + reg_sz);
+	ret = kvm_share_hyp(sve_buf, sve_buf + sve_sz);
 	if (ret) {
-		kfree(buf);
+		kfree(sve_buf);
 		return ret;
 	}
+
+	if (vcpu_has_sme(vcpu)) {
+		vl = vcpu->arch.max_vl[ARM64_VEC_SME];
+		if (WARN_ON(!sve_vl_valid(vl) ||
+			    vl > sme_max_virtualisable_vl() ||
+			    vl > VL_ARCH_MAX)) {
+			ret = -EIO;
+			goto free_sve;
+		}
+
+		sme_sz = vcpu_sme_state_size(vcpu);
+		sme_buf = kzalloc(sme_sz, GFP_KERNEL_ACCOUNT);
+		if (!sme_buf) {
+			ret = -ENOMEM;
+			goto free_sve;
+		}
+
+		ret = kvm_share_hyp(sme_buf, sme_buf + sme_sz);
+		if (ret) {
+			kfree(sme_buf);
+			goto free_sve;
+		}
+
+		vcpu->arch.sme_state = sme_buf;
+
+		/*
+		 * These are expected to be parsed from ID registers
+		 * once the general approach to doing that is worked
+		 * out.
+		 */
+		if (system_supports_sme2())
+			vcpu_set_flag(vcpu, GUEST_HAS_SME2);
+		if (system_supports_fa64())
+			vcpu_set_flag(vcpu, GUEST_HAS_FA64);
+	}
 	
-	vcpu->arch.sve_state = buf;
+	vcpu->arch.sve_state = sve_buf;
+
 	vcpu_set_flag(vcpu, VCPU_VEC_FINALIZED);
 	return 0;
+
+free_sve:
+	kvm_unshare_hyp(sve_buf, sve_buf + sve_sz);
+	kfree(sve_buf);
+	return ret;
 }
 
 int kvm_arm_vcpu_finalize(struct kvm_vcpu *vcpu, int feature)
@@ -150,19 +233,25 @@ bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu)
 void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu)
 {
 	void *sve_state = vcpu->arch.sve_state;
+	void *sme_state = vcpu->arch.sme_state;
 
 	kvm_vcpu_unshare_task_fp(vcpu);
 	kvm_unshare_hyp(vcpu, vcpu + 1);
 	if (sve_state)
 		kvm_unshare_hyp(sve_state, sve_state + vcpu_sve_state_size(vcpu));
 	kfree(sve_state);
+	if (sme_state)
+		kvm_unshare_hyp(sme_state, sme_state + vcpu_sme_state_size(vcpu));
+	kfree(sme_state);
 	kfree(vcpu->arch.ccsidr);
 }
 
-static void kvm_vcpu_reset_sve(struct kvm_vcpu *vcpu)
+static void kvm_vcpu_reset_vec(struct kvm_vcpu *vcpu)
 {
 	if (vcpu_has_sve(vcpu))
 		memset(vcpu->arch.sve_state, 0, vcpu_sve_state_size(vcpu));
+	if (vcpu_has_sme(vcpu))
+		memset(vcpu->arch.sme_state, 0, vcpu_sme_state_size(vcpu));
 }
 
 static void kvm_vcpu_enable_ptrauth(struct kvm_vcpu *vcpu)
@@ -210,8 +299,11 @@ void kvm_reset_vcpu(struct kvm_vcpu *vcpu)
 	if (!kvm_arm_vcpu_vec_finalized(vcpu)) {
 		if (vcpu_has_feature(vcpu, KVM_ARM_VCPU_SVE))
 			kvm_vcpu_enable_sve(vcpu);
+
+		if (vcpu_has_feature(vcpu, KVM_ARM_VCPU_SME))
+			kvm_vcpu_enable_sme(vcpu);
 	} else {
-		kvm_vcpu_reset_sve(vcpu);
+		kvm_vcpu_reset_vec(vcpu);
 	}
 
 	if (vcpu_has_feature(vcpu, KVM_ARM_VCPU_PTRAUTH_ADDRESS) ||

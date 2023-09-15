@@ -305,6 +305,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 	case KVM_CAP_ARM_SVE:
 		r = system_supports_sve();
 		break;
+	case KVM_CAP_ARM_SME:
+		r = system_supports_sme();
+		break;
 	case KVM_CAP_ARM_PTRAUTH_ADDRESS:
 	case KVM_CAP_ARM_PTRAUTH_GENERIC:
 		r = system_has_full_ptr_auth();
@@ -2556,6 +2559,10 @@ static __init int kvm_arm_init(void)
 		return err;
 
 	err = kvm_arm_init_sve();
+	if (err)
+		return err;
+
+	err = kvm_arm_init_sme();
 	if (err)
 		return err;
 

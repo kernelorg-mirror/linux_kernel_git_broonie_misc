@@ -1307,6 +1307,8 @@ void __init sme_setup(void)
 {
 	struct vl_info *info = &vl_info[ARM64_VEC_SME];
 	int min_bit, max_bit;
+	DECLARE_BITMAP(tmp_map, SVE_VQ_MAX);
+	unsigned long b;
 
 	if (!cpus_have_cap(ARM64_SME))
 		return;
@@ -1342,6 +1344,32 @@ void __init sme_setup(void)
 		info->max_vl);
 	pr_info("SME: default vector length %u bytes per vector\n",
 		get_sme_default_vl());
+
+	/*
+	 * KVM can't cope with any mismatch in supported VLs between
+	 * CPUs, detect any inconsistencies.  Unlike SVE it is
+	 * architecturally possible to end up with no VLs.
+	 */
+	bitmap_andnot(tmp_map, info->vq_partial_map, info->vq_map,
+		      SVE_VQ_MAX);
+
+	b = find_last_bit(tmp_map, SVE_VQ_MAX);
+	if (b >= SVE_VQ_MAX)
+		/* No non-virtualisable VLs found */
+		info->max_virtualisable_vl = SVE_VQ_MAX;
+	else if (WARN_ON(b == SVE_VQ_MAX - 1))
+		/* No virtualisable VLs?  Architecturally possible... */
+		info->max_virtualisable_vl = 0;
+	else /* b + 1 < SVE_VQ_MAX */
+		info->max_virtualisable_vl = sve_vl_from_vq(__bit_to_vq(b + 1));
+
+	if (info->max_virtualisable_vl > info->max_vl)
+		info->max_virtualisable_vl = info->max_vl;
+
+	/* KVM decides whether to support mismatched systems. Just warn here: */
+	if (sve_max_virtualisable_vl() < sve_max_vl())
+		pr_warn("%s: unvirtualisable vector lengths present\n",
+			info->name);
 }
 
 #endif /* CONFIG_ARM64_SME */

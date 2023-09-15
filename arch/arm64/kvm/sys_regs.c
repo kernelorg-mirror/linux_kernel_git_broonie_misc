@@ -3246,6 +3246,25 @@ int kvm_handle_sys_reg(struct kvm_vcpu *vcpu)
 	return 1;
 }
 
+/*
+ * Parse any vCPU flags out of the ID registers, executed the first
+ * time the vCPU is run.
+ */
+void kvm_arm_vcpu_parse_id_regs(struct kvm_vcpu *vcpu)
+{
+	unsigned int sme = IDREG_FIELD(vcpu->kvm, ID_AA64PFR1_EL1, SME);
+
+	if (sme) {
+		if (sme >= ID_AA64PFR1_EL1_SME_SME2) {
+			vcpu_set_flag(vcpu, GUEST_HAS_SME2);
+		}
+
+		if (IDREG_FIELD(vcpu->kvm, ID_AA64SMFR0_EL1, FA64)) {
+			vcpu_set_flag(vcpu, GUEST_HAS_FA64);
+		}
+	}
+}
+
 /******************************************************************************
  * Userspace API
  *****************************************************************************/

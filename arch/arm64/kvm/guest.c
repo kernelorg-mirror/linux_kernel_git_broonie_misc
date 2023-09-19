@@ -583,7 +583,6 @@ static int sme_reg_to_region(struct vec_state_reg_region *region,
 	const u64 zah_id_min = KVM_REG_ARM64_SME_ZAHREG(0, 0);
 	const u64 zah_id_max = KVM_REG_ARM64_SME_ZAHREG(za_h_max - 1,
 						       SVE_NUM_SLICES - 1);
-
 	unsigned int reg_num;
 
 	unsigned int reqoffset, reqlen; /* User-requested offset and length */
@@ -594,14 +593,24 @@ static int sme_reg_to_region(struct vec_state_reg_region *region,
 	reg_num = (reg->id & SVE_REG_ID_MASK) >> SVE_REG_ID_SHIFT;
 
 	if (reg->id >= zah_id_min && reg->id <= zah_id_max) {
-		/* ZA is exposed as SVE vectors ZA.H[n] */
 		if (!vcpu_has_sme(vcpu) || (reg->id & SVE_REG_SLICE_MASK) > 0)
 			return -ENOENT;
 
+		/* ZA is exposed as SVE vectors ZA.H[n] */
 		reqoffset = ZA_SIG_ZAV_OFFSET(vq, reg_num) -
 			ZA_SIG_REGS_OFFSET;
 		reqlen = KVM_SVE_ZREG_SIZE;
 		maxlen = SVE_SIG_ZREG_SIZE(vq);
+	} if (reg->id == KVM_REG_ARM64_SME_ZT_BASE) {
+		/* ZA is exposed as SVE vectors ZA.H[n] */
+		if (!vcpu_has_sme2(vcpu) ||
+		    (reg->id & SVE_REG_SLICE_MASK) > 0 ||
+		    reg_num > 0)
+			return -ENOENT;
+
+		/* ZT0 is stored after ZA */
+		reqlen = KVM_REG_ARM64_SME_ZTREG_SIZE;
+		maxlen = KVM_REG_ARM64_SME_ZTREG_SIZE;
 	} else {
 		return -EINVAL;
 	}

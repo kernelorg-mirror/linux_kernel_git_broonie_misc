@@ -373,9 +373,14 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 
 	/*
 	 * Default value for the FP state, will be overloaded at load
-	 * time if we support FP (pretty likely)
+	 * time if we support FP (pretty likely).  If we support both
+	 * SVE and SME we may have to rewrite between the two VLs,
+	 * default to formatting the registers for userspace access.
 	 */
-	vcpu->arch.fp_state = FP_STATE_FREE;
+	if (system_supports_sve() && system_supports_sme())
+		vcpu->arch.fp_state = FP_STATE_USER_OWNED;
+	else
+		vcpu->arch.fp_state = FP_STATE_FREE;
 
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);

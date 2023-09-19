@@ -131,6 +131,11 @@ extern void fa64_kernel_enable(const struct arm64_cpu_capabilities *__unused);
 extern u64 read_zcr_features(void);
 extern u64 read_smcr_features(void);
 
+void __fpsimd_to_sve(void *sst, struct user_fpsimd_state const *fst,
+		     unsigned int vq);
+void __sve_to_fpsimd(struct user_fpsimd_state *fst, void const *sst,
+		     unsigned int vq);
+
 /*
  * Helpers to translate bit indices in sve_vq_map to VQ values (and
  * vice versa).  This allows find_next_bit() to be used to find the

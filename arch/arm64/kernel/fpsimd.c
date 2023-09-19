@@ -649,8 +649,8 @@ static __uint128_t arm64_cpu_to_le128(__uint128_t x)
 
 #define arm64_le128_to_cpu(x) arm64_cpu_to_le128(x)
 
-static void __fpsimd_to_sve(void *sst, struct user_fpsimd_state const *fst,
-			    unsigned int vq)
+void __fpsimd_to_sve(void *sst, struct user_fpsimd_state const *fst,
+		     unsigned int vq)
 {
 	unsigned int i;
 	__uint128_t *p;
@@ -658,6 +658,18 @@ static void __fpsimd_to_sve(void *sst, struct user_fpsimd_state const *fst,
 	for (i = 0; i < SVE_NUM_ZREGS; ++i) {
 		p = (__uint128_t *)ZREG(sst, vq, i);
 		*p = arm64_cpu_to_le128(fst->vregs[i]);
+	}
+}
+
+void __sve_to_fpsimd(struct user_fpsimd_state *fst, const void *sst,
+		     unsigned int vq)
+{
+	unsigned int i;
+	__uint128_t const *p;
+
+	for (i = 0; i < SVE_NUM_ZREGS; ++i) {
+		p = (__uint128_t const *)ZREG(sst, vq, i);
+		fst->vregs[i] = arm64_le128_to_cpu(*p);
 	}
 }
 
@@ -702,18 +714,13 @@ static void sve_to_fpsimd(struct task_struct *task)
 	unsigned int vq, vl;
 	void const *sst = task->thread.sve_state;
 	struct user_fpsimd_state *fst = &task->thread.uw.fpsimd_state;
-	unsigned int i;
-	__uint128_t const *p;
 
 	if (!system_supports_sve() && !system_supports_sme())
 		return;
 
 	vl = thread_get_cur_vl(&task->thread);
 	vq = sve_vq_from_vl(vl);
-	for (i = 0; i < SVE_NUM_ZREGS; ++i) {
-		p = (__uint128_t const *)ZREG(sst, vq, i);
-		fst->vregs[i] = arm64_le128_to_cpu(*p);
-	}
+	__sve_to_fpsimd(fst, sst, vq);
 }
 
 #ifdef CONFIG_ARM64_SVE

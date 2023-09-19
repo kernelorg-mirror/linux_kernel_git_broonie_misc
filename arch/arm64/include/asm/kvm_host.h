@@ -855,6 +855,8 @@ void vcpu_fp_guest_to_user(struct kvm_vcpu *vcpu);
 	} else {							\
 		__vcpu_vq = vcpu_sme_max_vq(vcpu);			\
 		__size_ret = ZA_SIG_REGS_SIZE(__vcpu_vq);		\
+		if (system_supports_sme2())				\
+			__size_ret += ZT_SIG_REG_SIZE;			\
 	}								\
 									\
 	__size_ret;							\

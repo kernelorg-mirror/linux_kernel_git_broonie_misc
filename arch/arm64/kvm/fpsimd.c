@@ -14,6 +14,16 @@
 #include <asm/kvm_mmu.h>
 #include <asm/sysreg.h>
 
+static void *fpsimd_share_end(struct user_fpsimd_state *fpsimd)
+{
+	void *share_end = fpsimd + 1;
+
+	if (cpus_have_final_cap(ARM64_HAS_FPMR))
+		share_end += sizeof(u64);
+
+	return share_end;
+}
+
 void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu)
 {
 	struct task_struct *p = vcpu->arch.parent_task;
@@ -23,7 +33,7 @@ void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu)
 		return;
 
 	fpsimd = &p->thread.uw.fpsimd_state;
-	kvm_unshare_hyp(fpsimd, fpsimd + 1);
+	kvm_unshare_hyp(fpsimd, fpsimd_share_end(fpsimd));
 	put_task_struct(p);
 }
 
@@ -45,11 +55,15 @@ int kvm_arch_vcpu_run_map_fp(struct kvm_vcpu *vcpu)
 	kvm_vcpu_unshare_task_fp(vcpu);
 
 	/* Make sure the host task fpsimd state is visible to hyp: */
-	ret = kvm_share_hyp(fpsimd, fpsimd + 1);
+	ret = kvm_share_hyp(fpsimd, fpsimd_share_end(fpsimd));
 	if (ret)
 		return ret;
 
 	vcpu->arch.host_fpsimd_state = kern_hyp_va(fpsimd);
+	if (cpus_have_final_cap(ARM64_HAS_FPMR)) {
+		WARN_ON_ONCE(&current->thread.fpmr + 1 != fpsimd_share_end(fpsimd));
+		vcpu->arch.host_fpmr = kern_hyp_va(&current->thread.fpmr);
+	}
 
 	/*
 	 * We need to keep current's task_struct pinned until its data has been
@@ -153,7 +167,7 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 		fp_state.sve_vl = vcpu->arch.sve_max_vl;
 		fp_state.sme_state = NULL;
 		fp_state.svcr = &vcpu->arch.svcr;
-		fp_state.fpmr = &vcpu->arch.fpmr;
+		fp_state.fpmr = &__vcpu_sys_reg(vcpu, FPMR);
 		fp_state.fp_type = &vcpu->arch.fp_type;
 
 		if (vcpu_has_sve(vcpu))

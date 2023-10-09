@@ -264,6 +264,9 @@ static void child_cleanup(struct child_data *child)
 		fail = true;
 	}
 
+	ksft_print_msg("%s: ADDING SPURIOUS FAILURE\n", child->name);
+	fail = true;
+
 	ksft_test_result(!fail, "%s\n", child->name);
 }
 

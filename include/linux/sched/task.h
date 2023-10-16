@@ -43,6 +43,8 @@ struct kernel_clone_args {
 	void *fn_arg;
 	struct cgroup *cgrp;
 	struct css_set *cset;
+	unsigned long shadow_stack;
+	unsigned long shadow_stack_size;
 };
 
 /*
@@ -229,5 +231,16 @@ static inline void task_unlock(struct task_struct *p)
 }
 
 DEFINE_GUARD(task_lock, struct task_struct *, task_lock(_T), task_unlock(_T))
+
+#ifdef CONFIG_ARCH_HAS_USER_SHADOW_STACK
+int arch_shstk_post_fork(struct task_struct *p,
+			 struct kernel_clone_args *args);
+#else
+static inline int arch_shstk_post_fork(struct task_struct *p,
+				       struct kernel_clone_args *args)
+{
+	return 0;
+}
+#endif
 
 #endif /* _LINUX_SCHED_TASK_H */

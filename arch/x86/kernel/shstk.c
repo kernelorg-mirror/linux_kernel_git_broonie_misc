@@ -191,44 +191,105 @@ void reset_thread_features(void)
 	current->thread.features_locked = 0;
 }
 
-unsigned long shstk_alloc_thread_stack(struct task_struct *tsk, unsigned long clone_flags,
-				       unsigned long stack_size)
+int arch_shstk_post_fork(struct task_struct *t, struct kernel_clone_args *args)
+{
+	/*
+	 * SSP is aligned, so reserved bits and mode bit are a zero, just mark
+	 * the token 64-bit.
+	 */
+	struct mm_struct *mm;
+	unsigned long addr, ssp;
+	u64 expected;
+	u64 val;
+	int ret = -EINVAL;
+
+	ssp = args->shadow_stack + args->shadow_stack_size;
+	addr = ssp - SS_FRAME_SIZE;
+	expected = ssp | BIT(0);
+
+	mm = get_task_mm(t);
+	if (!mm)
+		return -EFAULT;
+
+	/* This should really be an atomic cmpxchg.  It is not. */
+	if (access_remote_vm(mm, addr, &val, sizeof(val),
+			     FOLL_FORCE) != sizeof(val))
+		goto out;
+
+	if (val != expected)
+		goto out;
+	val = 0;
+	if (access_remote_vm(mm, addr, &val, sizeof(val),
+			     FOLL_FORCE | FOLL_WRITE) != sizeof(val))
+		goto out;
+
+	ret = 0;
+
+out:
+	mmput(mm);
+	return ret;
+}
+
+unsigned long shstk_alloc_thread_stack(struct task_struct *tsk,
+				       const struct kernel_clone_args *args)
 {
 	struct thread_shstk *shstk = &tsk->thread.shstk;
+	unsigned long clone_flags = args->flags;
 	unsigned long addr, size;
 
 	/*
 	 * If shadow stack is not enabled on the new thread, skip any
-	 * switch to a new shadow stack.
+	 * implicit switch to a new shadow stack and reject attempts to
+	 * explciitly specify one.
 	 */
-	if (!features_enabled(ARCH_SHSTK_SHSTK))
-		return 0;
+	if (!features_enabled(ARCH_SHSTK_SHSTK)) {
+		if (args->shadow_stack || args->shadow_stack_size)
+			return (unsigned long)ERR_PTR(-EINVAL);
 
-	/*
-	 * For CLONE_VFORK the child will share the parents shadow stack.
-	 * Make sure to clear the internal tracking of the thread shadow
-	 * stack so the freeing logic run for child knows to leave it alone.
-	 */
-	if (clone_flags & CLONE_VFORK) {
-		shstk->base = 0;
-		shstk->size = 0;
 		return 0;
 	}
 
 	/*
-	 * For !CLONE_VM the child will use a copy of the parents shadow
-	 * stack.
+	 * If the user specified a shadow stack then do some basic
+	 * validation and use it, otherwise fall back to a default
+	 * shadow stack size if the clone_flags don't indicate an
+	 * allocation is unneeded.
 	 */
-	if (!(clone_flags & CLONE_VM))
-		return 0;
+	if (args->shadow_stack) {
+		addr = args->shadow_stack;
+		size = args->shadow_stack_size;
+		shstk->base = 0;
+		shstk->size = 0;
+	} else {
+		/*
+		 * For CLONE_VFORK the child will share the parents
+		 * shadow stack.  Make sure to clear the internal
+		 * tracking of the thread shadow stack so the freeing
+		 * logic run for child knows to leave it alone.
+		 */
+		if (clone_flags & CLONE_VFORK) {
+			shstk->base = 0;
+			shstk->size = 0;
+			return 0;
+		}
 
-	size = adjust_shstk_size(stack_size);
-	addr = alloc_shstk(0, size, 0, false);
-	if (IS_ERR_VALUE(addr))
-		return addr;
+		/*
+		 * For !CLONE_VM the child will use a copy of the
+		 * parents shadow stack.
+		 */
+		if (!(clone_flags & CLONE_VM))
+			return 0;
 
-	shstk->base = addr;
-	shstk->size = size;
+		size = args->stack_size;
+		size = adjust_shstk_size(size);
+		addr = alloc_shstk(0, size, 0, false);
+		if (IS_ERR_VALUE(addr))
+			return addr;
+
+		/* We allocated the shadow stack, we should deallocate it. */
+		shstk->base = addr;
+		shstk->size = size;
+	}
 
 	return addr + size;
 }

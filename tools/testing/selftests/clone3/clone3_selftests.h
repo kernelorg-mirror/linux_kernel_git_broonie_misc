@@ -44,6 +44,11 @@ struct __clone_args {
 #ifndef CLONE_ARGS_SIZE_VER2
 #define CLONE_ARGS_SIZE_VER2 88	/* sizeof third published struct */
 #endif
+	__aligned_u64 shadow_stack;
+	__aligned_u64 shadow_stack_size;
+#ifndef CLONE_ARGS_SIZE_VER3
+#define CLONE_ARGS_SIZE_VER3 104 /* sizeof fourth published struct */
+#endif
 };
 
 static pid_t sys_clone3(struct __clone_args *args, size_t size)

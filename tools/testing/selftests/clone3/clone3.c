@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -21,6 +22,10 @@
 #include "../kselftest.h"
 #include "clone3_selftests.h"
 
+static bool shadow_stack_supported;
+static __u64 shadow_stack;
+static size_t max_supported_args_size;
+
 enum test_mode {
 	CLONE3_ARGS_NO_TEST,
 	CLONE3_ARGS_ALL_0,
@@ -28,6 +33,9 @@ enum test_mode {
 	CLONE3_ARGS_INVAL_EXIT_SIGNAL_NEG,
 	CLONE3_ARGS_INVAL_EXIT_SIGNAL_CSIG,
 	CLONE3_ARGS_INVAL_EXIT_SIGNAL_NSIG,
+	CLONE3_ARGS_SHADOW_STACK,
+	CLONE3_ARGS_SHADOW_STACK_SIZE_ONLY,
+	CLONE3_ARGS_SHADOW_STACK_POINTER_ONLY,
 };
 
 typedef bool (*filter_function)(void);
@@ -43,6 +51,28 @@ struct test {
 	enum test_mode test_mode;
 	filter_function filter;
 };
+
+#ifndef __NR_map_shadow_stack
+#define __NR_map_shadow_stack 453
+#endif
+
+static void test_shadow_stack_supported(void)
+{
+	shadow_stack = syscall(__NR_map_shadow_stack, 0, getpagesize(), 0);
+	if (shadow_stack == -1) {
+		ksft_print_msg("map_shadow_stack() not supported\n");
+	} else if ((void *)shadow_stack == MAP_FAILED) {
+		ksft_print_msg("Failed to map shadow stack\n");
+	} else {
+		ksft_print_msg("Shadow stack supportd\n");
+		shadow_stack_supported = true;
+	}
+
+	/* Dummy stack to use for validating error checks */
+	if (!shadow_stack_supported) {
+		shadow_stack = (__u64)malloc(getpagesize());
+	}
+}
 
 static int call_clone3(uint64_t flags, size_t size, enum test_mode test_mode)
 {
@@ -88,6 +118,16 @@ static int call_clone3(uint64_t flags, size_t size, enum test_mode test_mode)
 		break;
 	case CLONE3_ARGS_INVAL_EXIT_SIGNAL_NSIG:
 		args.exit_signal = 0x00000000000000f0ULL;
+		break;
+	case CLONE3_ARGS_SHADOW_STACK:
+		args.shadow_stack = shadow_stack;
+		args.shadow_stack_size = getpagesize();
+		break;
+	case CLONE3_ARGS_SHADOW_STACK_SIZE_ONLY:
+		args.shadow_stack_size = getpagesize();
+		break;
+	case CLONE3_ARGS_SHADOW_STACK_POINTER_ONLY:
+		args.shadow_stack = shadow_stack;
 		break;
 	}
 
@@ -161,6 +201,26 @@ static bool not_root(void)
 {
 	if (getuid() != 0) {
 		ksft_print_msg("Not running as root\n");
+		return true;
+	}
+
+	return false;
+}
+
+static bool have_shadow_stack(void)
+{
+	if (shadow_stack_supported) {
+		ksft_print_msg("Shadow stack supported\n");
+		return true;
+	}
+
+	return false;
+}
+
+static bool no_shadow_stack(void)
+{
+	if (!shadow_stack_supported) {
+		ksft_print_msg("Shadow stack not supported\n");
 		return true;
 	}
 
@@ -309,6 +369,42 @@ static const struct test tests[] = {
 		.expected = -EINVAL,
 		.test_mode = CLONE3_ARGS_NO_TEST,
 	},
+	{
+		.name = "Shadow stack on system with shadow stack",
+		.flags = 0,
+		.size = 0,
+		.expected = 0,
+		.e2big_valid = true,
+		.test_mode = CLONE3_ARGS_SHADOW_STACK,
+		.filter = no_shadow_stack,
+	},
+	{
+		.name = "Shadow stack with only size specified",
+		.flags = 0,
+		.size = 0,
+		.expected = -EINVAL,
+		.e2big_valid = true,
+		.test_mode = CLONE3_ARGS_SHADOW_STACK_SIZE_ONLY,
+		.filter = no_shadow_stack,
+	},
+	{
+		.name = "Shadow stack with only pointer specified",
+		.flags = 0,
+		.size = 0,
+		.expected = -EINVAL,
+		.e2big_valid = true,
+		.test_mode = CLONE3_ARGS_SHADOW_STACK_POINTER_ONLY,
+		.filter = no_shadow_stack,
+	},
+	{
+		.name = "Shadow stack on system without shadow stack",
+		.flags = 0,
+		.size = 0,
+		.expected = -EINVAL,
+		.e2big_valid = true,
+		.test_mode = CLONE3_ARGS_SHADOW_STACK,
+		.filter = have_shadow_stack,
+	},
 };
 
 int main(int argc, char *argv[])
@@ -319,6 +415,7 @@ int main(int argc, char *argv[])
 	ksft_print_header();
 	ksft_set_plan(ARRAY_SIZE(tests));
 	test_clone3_supported();
+	test_shadow_stack_supported();
 
 	for (i = 0; i < ARRAY_SIZE(tests); i++)
 		test_clone3(&tests[i]);

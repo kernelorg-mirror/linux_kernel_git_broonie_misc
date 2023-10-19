@@ -1258,6 +1258,12 @@ config LOCK_MM_AND_FIND_VMA
 	bool
 	depends on !STACK_GROWSUP
 
+config ARCH_HAS_USER_SHADOW_STACK
+	bool
+	help
+	  The architecture has hardware support for userspace shadow call
+          stacks (eg, x86 CET, arm64 GCS, RISC-V Zisslpcfi).
+
 source "mm/damon/Kconfig"
 
 endmenu

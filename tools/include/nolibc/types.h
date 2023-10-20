@@ -109,7 +109,10 @@
 #define WIFSIGNALED(status) ((status) - 1 < 0xff)
 
 /* waitpid() flags */
-#define WNOHANG      1
+#define WNOHANG      0x00000001
+#define __WNOTHREAD  0x20000000
+#define __WALL       0x40000000
+#define __WCLONE     0x80000000
 
 /* standard exit() codes */
 #define EXIT_SUCCESS 0

@@ -152,7 +152,7 @@ struct thread_struct {
 	 * Maintainers must ensure manually that this contains no
 	 * implicit padding.
 	 */
-	struct {
+	struct thread_struct_uw {
 		unsigned long	tp_value;	/* TLS register */
 		unsigned long	tp2_value;
 		unsigned long	fpmr;

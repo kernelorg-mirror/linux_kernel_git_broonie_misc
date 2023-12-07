@@ -67,6 +67,8 @@ enum cgt_group_id {
 	CGT_HCR_TTLBIS,
 	CGT_HCR_TTLBOS,
 
+	CGT_HCRX_EnFPM,
+
 	CGT_MDCR_TPMCR,
 	CGT_MDCR_TPM,
 	CGT_MDCR_TDE,
@@ -279,6 +281,11 @@ static const struct trap_bits coarse_trap_bits[] = {
 		.mask		= HCR_TTLBOS,
 		.behaviour	= BEHAVE_FORWARD_ANY,
 	},
+	[CGT_HCRX_EnFPM] = {
+		.index		= HCRX_EL2,
+		.mask		= HCRX_EL2_EnFPM,
+		.behaviour	= BEHAVE_FORWARD_ANY,
+	},
 	[CGT_MDCR_TPMCR] = {
 		.index		= MDCR_EL2,
 		.value		= MDCR_EL2_TPMCR,
@@ -478,6 +485,7 @@ static const struct encoding_to_trap_config encoding_to_cgt[] __initconst = {
 	SR_TRAP(SYS_AIDR_EL1,		CGT_HCR_TID1),
 	SR_TRAP(SYS_SMIDR_EL1,		CGT_HCR_TID1),
 	SR_TRAP(SYS_CTR_EL0,		CGT_HCR_TID2),
+	SR_TRAP(SYS_FPMR,		CGT_HCRX_EnFPM),
 	SR_TRAP(SYS_CCSIDR_EL1,		CGT_HCR_TID2_TID4),
 	SR_TRAP(SYS_CCSIDR2_EL1,	CGT_HCR_TID2_TID4),
 	SR_TRAP(SYS_CLIDR_EL1,		CGT_HCR_TID2_TID4),

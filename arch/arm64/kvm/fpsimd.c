@@ -17,13 +17,13 @@
 void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu)
 {
 	struct task_struct *p = vcpu->arch.parent_task;
-	struct user_fpsimd_state *fpsimd;
+	struct thread_struct_uw *uw;
 
 	if (!is_protected_kvm_enabled() || !p)
 		return;
 
-	fpsimd = &p->thread.uw.fpsimd_state;
-	kvm_unshare_hyp(fpsimd, fpsimd + 1);
+	uw = &p->thread.uw;
+	kvm_unshare_hyp(uw, uw + 1);
 	put_task_struct(p);
 }
 
@@ -39,17 +39,16 @@ void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu)
 int kvm_arch_vcpu_run_map_fp(struct kvm_vcpu *vcpu)
 {
 	int ret;
-
-	struct user_fpsimd_state *fpsimd = &current->thread.uw.fpsimd_state;
+	struct thread_struct_uw *uw = &current->thread.uw;
 
 	kvm_vcpu_unshare_task_fp(vcpu);
 
 	/* Make sure the host task fpsimd state is visible to hyp: */
-	ret = kvm_share_hyp(fpsimd, fpsimd + 1);
+	ret = kvm_share_hyp(uw, uw + 1);
 	if (ret)
 		return ret;
 
-	vcpu->arch.host_fpsimd_state = kern_hyp_va(fpsimd);
+	vcpu->arch.host_uw = kern_hyp_va(uw);
 
 	/*
 	 * We need to keep current's task_struct pinned until its data has been

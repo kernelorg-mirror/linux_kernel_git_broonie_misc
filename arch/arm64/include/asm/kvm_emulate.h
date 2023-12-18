@@ -587,6 +587,7 @@ static __always_inline u64 kvm_get_reset_cptr_el2(struct kvm_vcpu *vcpu)
 	} else if (has_hvhe()) {
 		val = (CPACR_EL1_FPEN_EL0EN | CPACR_EL1_FPEN_EL1EN);
 
+		/* Leave traps enabled, we will restore EL2 lazily */
 		if (!vcpu_has_sve(vcpu) ||
 		    (vcpu->arch.fp_state != FP_STATE_GUEST_OWNED))
 			val |= CPACR_EL1_ZEN_EL1EN | CPACR_EL1_ZEN_EL0EN;
@@ -595,6 +596,7 @@ static __always_inline u64 kvm_get_reset_cptr_el2(struct kvm_vcpu *vcpu)
 	} else {
 		val = CPTR_NVHE_EL2_RES1;
 
+		/* Leave traps enabled, we will restore EL2 lazily */
 		if (vcpu_has_sve(vcpu) &&
 		    (vcpu->arch.fp_state == FP_STATE_GUEST_OWNED))
 			val |= CPTR_EL2_TZ;

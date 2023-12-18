@@ -420,6 +420,7 @@ void handle_trap(struct kvm_cpu_context *host_ctxt)
 		handle_host_smc(host_ctxt);
 		break;
 	case ESR_ELx_EC_SVE:
+		/* Handle lazy restore of the host VL */
 		if (has_hvhe())
 			sysreg_clear_set(cpacr_el1, 0, (CPACR_EL1_ZEN_EL1EN |
 							CPACR_EL1_ZEN_EL0EN));

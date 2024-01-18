@@ -27,6 +27,7 @@ place where this information is gathered.
    iommufd
    media/index
    netlink/index
+   shadow_stack
    sysfs-platform_profile
    vduse
    futex2

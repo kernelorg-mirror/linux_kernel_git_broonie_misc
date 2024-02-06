@@ -13,6 +13,10 @@
 
 #define __SVE_VQ_BYTES		16	/* number of bytes per quadword */
 
+/*
+ * Note that for future proofing __SVE_VQ_MAX is defined much larger
+ * than the actual architecture maximum of 16.
+ */
 #define __SVE_VQ_MIN		1
 #define __SVE_VQ_MAX		512
 

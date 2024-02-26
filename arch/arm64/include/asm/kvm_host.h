@@ -544,6 +544,13 @@ struct kvm_vcpu_arch {
 	unsigned int sve_max_vl;
 	u64 svcr;
 
+	/* Ownership of the FP regs */
+	enum {
+		FP_STATE_FREE,
+		FP_STATE_HOST_OWNED,
+		FP_STATE_GUEST_OWNED,
+	} fp_owner;
+
 	/* Stage 2 paging state used by the hardware on next switch */
 	struct kvm_s2_mmu *hw_mmu;
 
@@ -557,13 +564,6 @@ struct kvm_vcpu_arch {
 
 	/* Exception Information */
 	struct kvm_vcpu_fault_info fault;
-
-	/* Ownership of the FP regs */
-	enum {
-		FP_STATE_FREE,
-		FP_STATE_HOST_OWNED,
-		FP_STATE_GUEST_OWNED,
-	} fp_state;
 
 	/* Configuration flags, set once and for all before the vcpu can run */
 	u8 cflags;

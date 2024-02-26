@@ -377,7 +377,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	 * Default value for the FP state, will be overloaded at load
 	 * time if we support FP (pretty likely)
 	 */
-	vcpu->arch.fp_state = FP_STATE_FREE;
+	vcpu->arch.fp_owner = FP_STATE_FREE;
 
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);

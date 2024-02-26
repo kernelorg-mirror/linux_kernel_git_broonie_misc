@@ -75,7 +75,7 @@ int __init kvm_arm_init_sve(void)
 
 static void kvm_vcpu_enable_sve(struct kvm_vcpu *vcpu)
 {
-	vcpu->arch.sve_max_vl = kvm_sve_max_vl;
+	vcpu->arch.fp_state.sve_vl = kvm_sve_max_vl;
 
 	/*
 	 * Userspace can still customize the vector lengths by writing
@@ -87,7 +87,7 @@ static void kvm_vcpu_enable_sve(struct kvm_vcpu *vcpu)
 
 /*
  * Finalize vcpu's maximum SVE vector length, allocating
- * vcpu->arch.sve_state as necessary.
+ * vcpu->arch.fp_state.sve_state as necessary.
  */
 static int kvm_vcpu_finalize_sve(struct kvm_vcpu *vcpu)
 {
@@ -96,7 +96,7 @@ static int kvm_vcpu_finalize_sve(struct kvm_vcpu *vcpu)
 	size_t reg_sz;
 	int ret;
 
-	vl = vcpu->arch.sve_max_vl;
+	vl = vcpu->arch.fp_state.sve_vl;
 
 	/*
 	 * Responsibility for these properties is shared between
@@ -118,7 +118,8 @@ static int kvm_vcpu_finalize_sve(struct kvm_vcpu *vcpu)
 		return ret;
 	}
 	
-	vcpu->arch.sve_state = buf;
+	vcpu->arch.fp_state.sve_state = buf;
+	vcpu->arch.fp_state.to_save = FP_STATE_SVE;
 	vcpu_set_flag(vcpu, VCPU_SVE_FINALIZED);
 	return 0;
 }
@@ -149,7 +150,7 @@ bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu)
 
 void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu)
 {
-	void *sve_state = vcpu->arch.sve_state;
+	void *sve_state = vcpu->arch.fp_state.sve_state;
 
 	kvm_vcpu_unshare_task_fp(vcpu);
 	kvm_unshare_hyp(vcpu, vcpu + 1);
@@ -162,7 +163,8 @@ void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu)
 static void kvm_vcpu_reset_sve(struct kvm_vcpu *vcpu)
 {
 	if (vcpu_has_sve(vcpu))
-		memset(vcpu->arch.sve_state, 0, vcpu_sve_state_size(vcpu));
+		memset(vcpu->arch.fp_state.sve_state, 0,
+		       vcpu_sve_state_size(vcpu));
 }
 
 static void kvm_vcpu_enable_ptrauth(struct kvm_vcpu *vcpu)

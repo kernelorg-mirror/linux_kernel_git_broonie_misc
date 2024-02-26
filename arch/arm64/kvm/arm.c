@@ -379,6 +379,18 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	 */
 	vcpu->arch.fp_owner = FP_STATE_FREE;
 
+	/*
+	 * Initial setup for FP state for sharing with host, if SVE is
+	 * enabled additional configuration will be done.
+	 *
+	 * Currently we do not support SME guests so SVCR is always 0
+	 * and we just need a variable to point to.
+	 */
+	vcpu->arch.fp_state.st = &vcpu->arch.ctxt.fp_regs;
+	vcpu->arch.fp_state.fp_type = &vcpu->arch.fp_type;
+	vcpu->arch.fp_state.svcr = &vcpu->arch.svcr;
+	vcpu->arch.fp_state.to_save = FP_STATE_FPSIMD;
+
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);
 

@@ -539,9 +539,8 @@ struct kvm_vcpu_arch {
 	 * floating point code saves the register state of a task it
 	 * records which view it saved in fp_type.
 	 */
-	void *sve_state;
+	struct cpu_fp_state fp_state;
 	enum fp_type fp_type;
-	unsigned int sve_max_vl;
 	u64 svcr;
 
 	/* Ownership of the FP regs */
@@ -799,16 +798,16 @@ struct kvm_vcpu_arch {
 
 
 /* Pointer to the vcpu's SVE FFR for sve_{save,load}_state() */
-#define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
-			     sve_ffr_offset((vcpu)->arch.sve_max_vl))
+#define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.fp_state.sve_state) + \
+			     sve_ffr_offset((vcpu)->arch.fp_state.sve_vl))
 
-#define vcpu_sve_max_vq(vcpu)	sve_vq_from_vl((vcpu)->arch.sve_max_vl)
+#define vcpu_sve_max_vq(vcpu)	sve_vq_from_vl((vcpu)->arch.fp_state.sve_vl)
 
 #define vcpu_sve_state_size(vcpu) ({					\
 	size_t __size_ret;						\
 	unsigned int __vcpu_vq;						\
 									\
-	if (WARN_ON(!sve_vl_valid((vcpu)->arch.sve_max_vl))) {		\
+	if (WARN_ON(!sve_vl_valid((vcpu)->arch.fp_state.sve_vl))) {	\
 		__size_ret = 0;						\
 	} else {							\
 		__vcpu_vq = vcpu_sve_max_vq(vcpu);			\

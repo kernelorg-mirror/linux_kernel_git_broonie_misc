@@ -475,6 +475,8 @@ enum vcpu_sysreg {
 };
 
 struct kvm_cpu_context {
+	u64	reg_dirty;		/* Mask of HFGWTR_EL2 bits */
+
 	struct user_pt_regs regs;	/* sp = sp_el0 */
 
 	u64	spsr_abt;
@@ -491,6 +493,32 @@ struct kvm_cpu_context {
 	/* This pointer has to be 4kB aligned. */
 	u64 *vncr_array;
 };
+
+static inline bool __ctxt_reg_dirty(const struct kvm_cpu_context *ctxt,
+				    u64 trap)
+{
+	return ctxt->reg_dirty & trap;
+}
+
+static inline bool __ctxt_reg_set_dirty(struct kvm_cpu_context *ctxt, u64 trap)
+{
+	return ctxt->reg_dirty |= trap;
+}
+
+static inline bool __ctxt_reg_set_clean(struct kvm_cpu_context *ctxt, u64 trap)
+{
+	return ctxt->reg_dirty &= ~trap;
+}
+
+#define ctxt_reg_dirty(ctxt, trap) \
+	__ctxt_reg_dirty(ctxt, HFGxTR_EL2_##trap)
+
+
+#define ctxt_reg_set_dirty(ctxt, trap) \
+	__ctxt_reg_set_dirty(ctxt, HFGxTR_EL2_##trap)
+
+#define ctxt_reg_set_clean(ctxt, trap) \
+	__ctxt_reg_set_clean(ctxt, HFGxTR_EL2_##trap)
 
 struct kvm_host_data {
 	struct kvm_cpu_context host_ctxt;
@@ -1118,6 +1146,15 @@ static inline void kvm_init_host_cpu_context(struct kvm_cpu_context *cpu_ctxt)
 {
 	/* The host's MPIDR is immutable, so let's set it up at boot time */
 	ctxt_sys_reg(cpu_ctxt, MPIDR_EL1) = read_cpuid_mpidr();
+
+	/*
+	 * Save the S1PIE setup on first use, we assume the host will
+	 * never update.
+	 */
+	if (cpus_have_final_cap(ARM64_HAS_S1PIE)) {
+		ctxt_reg_set_dirty(cpu_ctxt, nPIR_EL1);
+		ctxt_reg_set_dirty(cpu_ctxt, nPIRE0_EL1);
+	}
 }
 
 static inline bool kvm_system_needs_idmapped_vectors(void)

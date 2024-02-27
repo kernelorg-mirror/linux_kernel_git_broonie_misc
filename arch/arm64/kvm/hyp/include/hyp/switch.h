@@ -152,6 +152,12 @@ static inline void __activate_traps_hfgxtr(struct kvm_vcpu *vcpu)
 	if (cpus_have_final_cap(ARM64_WORKAROUND_AMPERE_AC03_CPU_38))
 		w_set |= HFGxTR_EL2_TCR_EL1_MASK;
 
+	/*
+	 * Trap writes to infrequently updated registers.
+	 */
+	if (cpus_have_final_cap(ARM64_HAS_S1PIE))
+		w_clr |= HFGxTR_EL2_nPIR_EL1 | HFGxTR_EL2_nPIRE0_EL1;
+
 	if (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)) {
 		compute_clr_set(vcpu, HFGRTR_EL2, r_clr, r_set);
 		compute_clr_set(vcpu, HFGWTR_EL2, w_clr, w_set);
@@ -570,6 +576,33 @@ static bool handle_ampere1_tcr(struct kvm_vcpu *vcpu)
 	return true;
 }
 
+static inline bool kvm_hyp_handle_read_mostly_sysreg(struct kvm_vcpu *vcpu)
+{
+	u32 sysreg = esr_sys64_to_sysreg(kvm_vcpu_get_esr(vcpu));
+	u64 fgt_w_set;
+
+	switch (sysreg) {
+	case SYS_PIR_EL1:
+	case SYS_PIRE0_EL1:
+		/*
+		 * PIR registers are always restored, we just need to
+		 * disable write traps.  We expect EL0 and EL1
+		 * controls to be updated close together so enable
+		 * both.
+		 */
+		if (!cpus_have_final_cap(ARM64_HAS_S1PIE))
+			return false;
+		fgt_w_set = HFGxTR_EL2_nPIRE0_EL1 | HFGxTR_EL2_nPIR_EL1;
+		break;
+	default:
+		return false;
+	}
+
+	sysreg_clear_set_s(SYS_HFGWTR_EL2, 0, fgt_w_set);
+	vcpu->arch.ctxt.reg_dirty |= fgt_w_set;
+	return true;
+}
+
 static bool kvm_hyp_handle_sysreg(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
 	if (cpus_have_final_cap(ARM64_WORKAROUND_CAVIUM_TX2_219_TVM) &&
@@ -588,6 +621,9 @@ static bool kvm_hyp_handle_sysreg(struct kvm_vcpu *vcpu, u64 *exit_code)
 		return kvm_hyp_handle_ptrauth(vcpu, exit_code);
 
 	if (kvm_hyp_handle_cntpct(vcpu))
+		return true;
+
+	if (kvm_hyp_handle_read_mostly_sysreg(vcpu))
 		return true;
 
 	return false;

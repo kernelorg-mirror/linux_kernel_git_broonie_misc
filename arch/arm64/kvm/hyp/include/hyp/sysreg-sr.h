@@ -55,9 +55,13 @@ static inline void __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 	ctxt_sys_reg(ctxt, CONTEXTIDR_EL1) = read_sysreg_el1(SYS_CONTEXTIDR);
 	ctxt_sys_reg(ctxt, AMAIR_EL1)	= read_sysreg_el1(SYS_AMAIR);
 	ctxt_sys_reg(ctxt, CNTKCTL_EL1)	= read_sysreg_el1(SYS_CNTKCTL);
-	if (cpus_have_final_cap(ARM64_HAS_S1PIE)) {
+	if (ctxt_reg_dirty(ctxt, nPIR_EL1)) {
 		ctxt_sys_reg(ctxt, PIR_EL1)	= read_sysreg_el1(SYS_PIR);
+		ctxt_reg_set_clean(ctxt, nPIR_EL1);
+	}
+	if (ctxt_reg_dirty(ctxt, nPIRE0_EL1)) {
 		ctxt_sys_reg(ctxt, PIRE0_EL1)	= read_sysreg_el1(SYS_PIRE0);
+		ctxt_reg_set_clean(ctxt, nPIRE0_EL1);
 	}
 	ctxt_sys_reg(ctxt, PAR_EL1)	= read_sysreg_par();
 	ctxt_sys_reg(ctxt, TPIDR_EL1)	= read_sysreg(tpidr_el1);

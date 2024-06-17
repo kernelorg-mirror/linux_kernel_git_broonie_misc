@@ -82,6 +82,8 @@ extern void fpsimd_restore_current_state(void);
 extern void fpsimd_update_current_state(struct user_fpsimd_state const *state);
 extern void fpsimd_kvm_prepare(void);
 
+extern void fpsimd_idle_enter(void);
+
 struct cpu_fp_state {
 	struct user_fpsimd_state *st;
 	void *sve_state;

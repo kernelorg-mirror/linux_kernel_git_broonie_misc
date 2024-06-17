@@ -383,6 +383,10 @@ void __noreturn cpu_die(void)
 	/* Tell cpuhp_bp_sync_dead() that this CPU is now safe to dispose of */
 	cpuhp_ap_report_dead();
 
+	/* Ensure we are not spuriously contending any SMCU */
+	if (system_supports_sme())
+		sme_smstop();
+
 	/*
 	 * Actually shutdown the CPU. This must never fail. The specific hotplug
 	 * mechanism must perform all required cache maintenance to ensure that

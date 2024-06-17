@@ -2126,6 +2126,20 @@ static void __init fpsimd_pm_init(void)
 static inline void fpsimd_pm_init(void) { }
 #endif /* CONFIG_CPU_PM */
 
+void fpsimd_idle_enter(void)
+{
+	/*
+	 * Leaving SME enabled may leave this core contending with
+	 * other cores if we have a SMCU, disable whenever we enter
+	 * idle to avoid this.  Only do this if they're actually
+	 * enabled to avoid overhead in cases where we don't enter a
+	 * low enough power state to loose register state.
+	 */
+	if (system_supports_sme() &&
+	    (read_sysreg_s(SYS_SVCR) & (SVCR_SM_MASK | SVCR_ZA_MASK)))
+		fpsimd_save_and_flush_cpu_state();
+}
+
 #ifdef CONFIG_HOTPLUG_CPU
 static int fpsimd_cpu_dead(unsigned int cpu)
 {

@@ -68,6 +68,11 @@ EXPORT_SYMBOL(__stack_chk_guard);
 void (*pm_power_off)(void);
 EXPORT_SYMBOL_GPL(pm_power_off);
 
+void arch_cpu_idle_enter(void)
+{
+       fpsimd_idle_enter();
+}
+
 #ifdef CONFIG_HOTPLUG_CPU
 void __noreturn arch_cpu_idle_dead(void)
 {

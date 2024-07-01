@@ -592,24 +592,15 @@ static __always_inline void kvm_incr_pc(struct kvm_vcpu *vcpu)
 		cptr;							\
 	})
 
-#define cpacr_clear_set(clr, set)					\
-	do {								\
-		BUILD_BUG_ON((set) & CPTR_VHE_EL2_RES0);		\
-		BUILD_BUG_ON((clr) & CPACR_ELx_E0POE);			\
-		__build_check_all_or_none((clr), CPACR_ELx_FPEN);	\
-		__build_check_all_or_none((set), CPACR_ELx_FPEN);	\
-		__build_check_all_or_none((clr), CPACR_ELx_ZEN);	\
-		__build_check_all_or_none((set), CPACR_ELx_ZEN);	\
-		__build_check_all_or_none((clr), CPACR_ELx_SMEN);	\
-		__build_check_all_or_none((set), CPACR_ELx_SMEN);	\
-									\
-		if (has_vhe() || has_hvhe())				\
-			sysreg_clear_set(cpacr_el1, clr, set);		\
-		else							\
-			sysreg_clear_set(cptr_el2,			\
-					 __cpacr_to_cptr_clr(clr, set),	\
-					 __cpacr_to_cptr_set(clr, set));\
-	} while (0)
+static __always_inline void cpacr_clear_set(u64 clr, u64 set)
+{
+	if (has_vhe() || has_hvhe())
+		sysreg_clear_set(cpacr_el1, clr, set);
+	else
+		sysreg_clear_set(cptr_el2,
+				 __cpacr_to_cptr_clr(clr, set),
+				 __cpacr_to_cptr_set(clr, set));
+}
 
 static __always_inline void kvm_write_cptr_el2(u64 val)
 {

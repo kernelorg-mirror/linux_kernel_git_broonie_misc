@@ -1017,15 +1017,17 @@ struct kvm_vcpu_arch {
 	size_t __size_ret;						\
 	unsigned int __vcpu_vq;						\
 									\
-	if (WARN_ON(!sve_vl_valid((vcpu)->arch.max_vl[ARM64_VEC_SVE]))) { \
+	if (WARN_ON(!sve_vl_valid(vcpu_max_vl(vcpu)))) {		\
 		__size_ret = 0;						\
 	} else {							\
-		__vcpu_vq = vcpu_sve_max_vq(vcpu);			\
+		__vcpu_vq = sve_vl_from_vq(vcpu_max_vl(vcpu));		\
 		__size_ret = SVE_SIG_REGS_SIZE(__vcpu_vq);		\
 	}								\
 									\
 	__size_ret;							\
 })
+
+#define vcpu_sme_state(vcpu) (kern_hyp_va((vcpu)->arch.sme_state))
 
 /*
  * Only use __vcpu_sys_reg/ctxt_sys_reg if you know you want the
@@ -1582,5 +1584,8 @@ void kvm_set_vm_id_reg(struct kvm *kvm, u32 reg, u64 val);
 #define kvm_has_sme2(k)					\
 	(system_supports_sme() &&			\
 	 kvm_has_feat((k), ID_AA64PFR1_EL1, SME, SME2))
+
+#define vcpu_in_streaming_mode(vcpu) \
+	(__vcpu_sys_reg(vcpu, SVCR) & SVCR_SM_MASK)
 
 #endif /* __ARM64_KVM_HOST_H__ */

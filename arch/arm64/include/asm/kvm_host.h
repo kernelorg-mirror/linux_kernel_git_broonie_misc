@@ -1600,4 +1600,7 @@ void kvm_set_vm_id_reg(struct kvm *kvm, u32 reg, u64 val);
 #define vcpu_has_fa64(vcpu)	kvm_has_fa64((vcpu)->kvm)
 #endif
 
+#define vcpu_in_streaming_mode(vcpu) \
+	(__vcpu_sys_reg(vcpu, SVCR) & SVCR_SM_MASK)
+
 #endif /* __ARM64_KVM_HOST_H__ */

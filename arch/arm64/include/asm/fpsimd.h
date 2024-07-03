@@ -69,6 +69,8 @@ static inline void cpacr_restore(unsigned long cpacr)
 #define ARCH_SVE_VQ_MAX ((ZCR_ELx_LEN_MASK >> ZCR_ELx_LEN_SHIFT) + 1)
 #define SME_VQ_MAX	((SMCR_ELx_LEN_MASK >> SMCR_ELx_LEN_SHIFT) + 1)
 
+#define SME_VQ_INVALID	(SME_VQ_MAX + 1)
+
 struct task_struct;
 
 extern void fpsimd_save_state(struct user_fpsimd_state *state);

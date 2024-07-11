@@ -24,6 +24,7 @@ typedef struct timespec timestamp_t;
 
 struct card_data {
 	int card;
+	const char *name;
 	pthread_t thread;
 	struct card_data *next;
 };
@@ -35,6 +36,7 @@ struct pcm_data {
 	int card;
 	int device;
 	int subdevice;
+	const char *card_name;
 	snd_pcm_stream_t stream;
 	snd_config_t *pcm_config;
 	struct pcm_data *next;
@@ -191,6 +193,7 @@ static void find_pcms(void)
 		if (!card_data)
 			ksft_exit_fail_msg("Out of memory\n");
 		card_data->card = card;
+		card_data->name = card_longname;
 		card_data->next = card_list;
 		card_list = card_data;
 
@@ -232,6 +235,7 @@ static void find_pcms(void)
 					pcm_data->card = card;
 					pcm_data->device = dev;
 					pcm_data->subdevice = subdev;
+					pcm_data->card_name = card_name;
 					pcm_data->stream = stream;
 					pcm_data->pcm_config = conf_get_subtree(card_config, key, NULL);
 					pcm_data->next = pcm_list;
@@ -294,9 +298,9 @@ static void test_pcm_time(struct pcm_data *data, enum test_class class,
 
 	desc = conf_get_string(pcm_cfg, "description", NULL, NULL);
 	if (desc)
-		ksft_print_msg("%s.%s.%d.%d.%d.%s - %s\n",
+		ksft_print_msg("%s.%s.%s.%d.%d.%s - %s\n",
 			       test_class_name, test_name,
-			       data->card, data->device, data->subdevice,
+			       data->card_name, data->device, data->subdevice,
 			       snd_pcm_stream_name(data->stream),
 			       desc);
 
@@ -352,9 +356,9 @@ __format:
 			old_format = format;
 			format = snd_pcm_format_value(alt_formats[i]);
 			if (format != SND_PCM_FORMAT_UNKNOWN) {
-				ksft_print_msg("%s.%d.%d.%d.%s.%s format %s -> %s\n",
+				ksft_print_msg("%s.%s.%d.%d.%s.%s format %s -> %s\n",
 						 test_name,
-						 data->card, data->device, data->subdevice,
+						 data->card_name, data->device, data->subdevice,
 						 snd_pcm_stream_name(data->stream),
 						 snd_pcm_access_name(access),
 						 snd_pcm_format_name(old_format),
@@ -430,9 +434,9 @@ __format:
 		goto __close;
 	}
 
-	ksft_print_msg("%s.%s.%d.%d.%d.%s hw_params.%s.%s.%ld.%ld.%ld.%ld sw_params.%ld\n",
+	ksft_print_msg("%s.%s.%s.%d.%d.%s hw_params.%s.%s.%ld.%ld.%ld.%ld sw_params.%ld\n",
 		         test_class_name, test_name,
-			 data->card, data->device, data->subdevice,
+			 data->card_name, data->device, data->subdevice,
 			 snd_pcm_stream_name(data->stream),
 			 snd_pcm_access_name(access),
 			 snd_pcm_format_name(format),
@@ -491,9 +495,10 @@ __close:
 		 * Anything specified as specific to this system
 		 * should always be supported.
 		 */
-		ksft_test_result(!skip, "%s.%s.%d.%d.%d.%s.params\n",
+		ksft_test_result(!skip, "%s.%s.%s.%d.%d.%s.params\n",
 				 test_class_name, test_name,
-				 data->card, data->device, data->subdevice,
+				 data->card_name, data->device,
+				 data->subdevice,
 				 snd_pcm_stream_name(data->stream));
 		break;
 	default:
@@ -501,14 +506,16 @@ __close:
 	}
 
 	if (!skip)
-		ksft_test_result(pass, "%s.%s.%d.%d.%d.%s\n",
+		ksft_test_result(pass, "%s.%s.%s.%d.%d.%s\n",
 				 test_class_name, test_name,
-				 data->card, data->device, data->subdevice,
+				 data->card_name, data->device,
+				 data->subdevice,
 				 snd_pcm_stream_name(data->stream));
 	else
-		ksft_test_result_skip("%s.%s.%d.%d.%d.%s\n",
+		ksft_test_result_skip("%s.%s.%s.%d.%d.%s\n",
 				 test_class_name, test_name,
-				 data->card, data->device, data->subdevice,
+				 data->card_name, data->device,
+				 data->subdevice,
 				 snd_pcm_stream_name(data->stream));
 
 	if (msg[0])
@@ -609,8 +616,8 @@ int main(void)
 					      conf->filename, conf->config_id);
 
 	for (pcm = pcm_missing; pcm != NULL; pcm = pcm->next) {
-		ksft_test_result(false, "test.missing.%d.%d.%d.%s\n",
-				 pcm->card, pcm->device, pcm->subdevice,
+		ksft_test_result(false, "test.missing.%s.%d.%d.%s\n",
+				 pcm->card_name, pcm->device, pcm->subdevice,
 				 snd_pcm_stream_name(pcm->stream));
 	}
 

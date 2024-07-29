@@ -343,6 +343,10 @@
  * FGT register definitions
  *
  * RES0 and polarity masks for the FGT registers.
+ *
+ * _RES0:  Bits which are RES0
+ * _MASK:  Bits with positive polarity
+ * _nMASK: Bits with negative polarity
  */
 #define __HFGRTR_EL2_RES0	HFGxTR_EL2_RES0
 #define __HFGRTR_EL2_MASK	GENMASK(49, 0)

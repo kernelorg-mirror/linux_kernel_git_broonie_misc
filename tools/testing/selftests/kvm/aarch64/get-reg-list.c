@@ -22,25 +22,18 @@ struct feature_id_reg {
 	__u64 feat_min;
 };
 
-static struct feature_id_reg feat_id_regs[] = {
-	{
-		ARM64_SYS_REG(3, 0, 2, 0, 3),	/* TCR2_EL1 */
-		ARM64_SYS_REG(3, 0, 0, 7, 3),	/* ID_AA64MMFR3_EL1 */
-		0,
-		1
-	},
-	{
-		ARM64_SYS_REG(3, 0, 10, 2, 2),	/* PIRE0_EL1 */
-		ARM64_SYS_REG(3, 0, 0, 7, 3),	/* ID_AA64MMFR3_EL1 */
-		4,
-		1
-	},
-	{
-		ARM64_SYS_REG(3, 0, 10, 2, 3),	/* PIR_EL1 */
-		ARM64_SYS_REG(3, 0, 0, 7, 3),	/* ID_AA64MMFR3_EL1 */
-		4,
-		1
+#define FEAT_ID_CHECK(xreg, xid_reg, id_field, id_val)			\
+	{								\
+		.reg		= KVM_ARM64_SYS_REG(SYS_##xreg),	\
+		.id_reg		= KVM_ARM64_SYS_REG(SYS_##xid_reg),	\
+		.feat_shift	= xid_reg##_##id_field##_SHIFT,		\
+		.feat_min	= xid_reg##_##id_field##_##id_val,	\
 	}
+
+static struct feature_id_reg feat_id_regs[] = {
+	FEAT_ID_CHECK(TCR2_EL1, ID_AA64MMFR3_EL1, TCRX, IMP),
+	FEAT_ID_CHECK(PIRE0_EL1, ID_AA64MMFR3_EL1, S1PIE, IMP),
+	FEAT_ID_CHECK(PIR_EL1, ID_AA64MMFR3_EL1, S1PIE, IMP),
 };
 
 bool filter_reg(__u64 reg)

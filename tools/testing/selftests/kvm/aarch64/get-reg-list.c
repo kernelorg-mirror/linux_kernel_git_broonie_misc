@@ -313,8 +313,15 @@ static __u64 base_regs[] = {
 	KVM_REG_ARM_FW_FEAT_BMAP_REG(0),	/* KVM_REG_ARM_STD_BMAP */
 	KVM_REG_ARM_FW_FEAT_BMAP_REG(1),	/* KVM_REG_ARM_STD_HYP_BMAP */
 	KVM_REG_ARM_FW_FEAT_BMAP_REG(2),	/* KVM_REG_ARM_VENDOR_HYP_BMAP */
-	ARM64_SYS_REG(3, 3, 14, 3, 1),	/* CNTV_CTL_EL0 */
-	ARM64_SYS_REG(3, 3, 14, 3, 2),	/* CNTV_CVAL_EL0 */
+
+	/*
+	 * Incorrect encodings for CNTV_CTL_EL0 and CNTV_CVAL_EL0 made
+	 * it into the KVM ABI so we have custom encodings for them
+	 * that do not align with the architecture.
+	 */
+	KVM_REG_ARM_TIMER_CTL,
+	KVM_REG_ARM_TIMER_CVAL,
+
 	ARM64_SYS_REG(3, 3, 14, 0, 2),
 	ARM64_SYS_REG(3, 0, 0, 0, 0),	/* MIDR_EL1 */
 	ARM64_SYS_REG(3, 0, 0, 0, 6),	/* REVIDR_EL1 */

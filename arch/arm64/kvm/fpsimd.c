@@ -127,19 +127,25 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 	WARN_ON_ONCE(!irqs_disabled());
 
 	if (guest_owns_fp_regs()) {
-		/*
-		 * Currently we do not support SME guests so SVCR is
-		 * always 0 and we just need a variable to point to.
-		 */
 		fp_state.st = &vcpu->arch.ctxt.fp_regs;
 		fp_state.sve_state = vcpu->arch.sve_state;
 		fp_state.sve_vl = vcpu->arch.max_vl[ARM64_VEC_SVE];
-		fp_state.sme_state = NULL;
+		fp_state.sme_vl = vcpu->arch.max_vl[ARM64_VEC_SME];
+		fp_state.sme_state = vcpu->arch.sme_state;
 		fp_state.svcr = &__vcpu_sys_reg(vcpu, SVCR);
 		fp_state.fpmr = &__vcpu_sys_reg(vcpu, FPMR);
 		fp_state.fp_type = &vcpu->arch.fp_type;
-		fp_state.sme_features = 0;
 
+		fp_state.sme_features = 0;
+		if (kvm_has_fa64(vcpu->kvm))
+			fp_state.sme_features |= SMCR_ELx_FA64;
+		if (kvm_has_sme2(vcpu->kvm))
+			fp_state.sme_features |= SMCR_ELx_EZT0;
+
+		/*
+		 * For SME only hosts fpsimd_save() will override the
+		 * state selection if we are in streaming mode.
+		 */
 		if (vcpu_has_sve(vcpu))
 			fp_state.to_save = FP_STATE_SVE;
 		else
@@ -186,6 +192,32 @@ static void kvm_vcpu_put_sve(struct kvm_vcpu *vcpu)
 				       SYS_ZCR_EL1);
 }
 
+static void kvm_vcpu_put_sme(struct kvm_vcpu *vcpu)
+{
+	u64 smcr;
+
+	if (!vcpu_has_sme(vcpu))
+		return;
+
+	smcr = read_sysreg_el1(SYS_SMCR);
+
+	/*
+	 * If the vCPU is in the hyp context then SMCR_EL1 is loaded
+	 * with its vEL2 counterpart.
+	 */
+	__vcpu_sys_reg(vcpu, vcpu_sme_smcr_elx(vcpu)) = smcr;
+
+	/*
+	 * As for SVE we always save the SME state for the guest using
+	 * the maximum VL supported by the guest so if we are using
+	 * nVHE or were in a nested guest we need to set the VL for
+	 * the host to match.
+	 */
+	if (!has_vhe() || (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)))
+		sme_cond_update_smcr_vq(vcpu_sme_max_vq(vcpu) - 1,
+					SYS_SMCR_EL1);
+}
+
 /*
  * Write back the vcpu FPSIMD regs if they are dirty, and invalidate the
  * cpu FPSIMD regs so that they can't be spuriously reused if this vcpu
@@ -198,23 +230,9 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 
 	local_irq_save(flags);
 
-	/*
-	 * If we have VHE then the Hyp code will reset CPACR_EL1 to
-	 * the default value and we need to reenable SME.
-	 */
-	if (has_vhe() && system_supports_sme()) {
-		/* Also restore EL0 state seen on entry */
-		if (vcpu_get_flag(vcpu, HOST_SME_ENABLED))
-			sysreg_clear_set(CPACR_EL1, 0, CPACR_ELx_SMEN);
-		else
-			sysreg_clear_set(CPACR_EL1,
-					 CPACR_EL1_SMEN_EL0EN,
-					 CPACR_EL1_SMEN_EL1EN);
-		isb();
-	}
-
 	if (guest_owns_fp_regs()) {
 		kvm_vcpu_put_sve(vcpu);
+		kvm_vcpu_put_sme(vcpu);
 
 		/*
 		 * Flush (save and invalidate) the FP state so that if
@@ -227,18 +245,30 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 		 * when needed.
 		 */
 		fpsimd_save_and_flush_cpu_state();
-	} else if (has_vhe() && system_supports_sve()) {
+	} else if (has_vhe() && (system_supports_sve() ||
+				 system_supports_sme())) {
 		/*
-		 * The FPSIMD/SVE state in the CPU has not been touched, and we
-		 * have SVE (and VHE): CPACR_EL1 (alias CPTR_EL2) has been
-		 * reset by kvm_reset_cptr_el2() in the Hyp code, disabling SVE
-		 * for EL0.  To avoid spurious traps, restore the trap state
-		 * seen by kvm_arch_vcpu_load_fp():
+		 * The FP state in the CPU has not been touched, and
+		 * we have a vector extension (and VHE): CPACR_EL1
+		 * (alias CPTR_EL2) has been reset by
+		 * kvm_reset_cptr_el2() in the Hyp code, disabling SVE
+		 * for EL0.  To avoid spurious traps, restore the trap
+		 * state seen by kvm_arch_vcpu_load_fp():
 		 */
+		u64 clear = 0;
+		u64 set = 0;
+
 		if (vcpu_get_flag(vcpu, HOST_SVE_ENABLED))
-			sysreg_clear_set(CPACR_EL1, 0, CPACR_EL1_ZEN_EL0EN);
+			set |= CPACR_EL1_ZEN_EL0EN;
 		else
-			sysreg_clear_set(CPACR_EL1, CPACR_EL1_ZEN_EL0EN, 0);
+			clear |= CPACR_EL1_ZEN_EL0EN;
+
+		if (vcpu_get_flag(vcpu, HOST_SME_ENABLED))
+			set |= CPACR_EL1_SMEN_EL0EN;
+		else
+			clear |= CPACR_EL1_SMEN_EL0EN;
+
+		sysreg_clear_set(CPACR_EL1, clear, set);
 	}
 
 	local_irq_restore(flags);

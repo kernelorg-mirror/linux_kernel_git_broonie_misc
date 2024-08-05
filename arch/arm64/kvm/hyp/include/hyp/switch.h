@@ -343,6 +343,37 @@ static bool kvm_hyp_handle_mops(struct kvm_vcpu *vcpu, u64 *exit_code)
 	return true;
 }
 
+static inline void __hyp_sme_restore_guest(struct kvm_vcpu *vcpu,
+					   bool *restore_sve,
+					   bool *restore_ffr)
+{
+	u64 old_smcr, new_smcr;
+	struct kvm *kvm = kern_hyp_va(vcpu->kvm);
+	bool has_fa64 = kvm_has_fa64(kvm);
+	bool has_sme2 = kvm_has_sme2(kvm);
+
+	old_smcr = read_sysreg_s(SYS_SMCR_EL2);
+	new_smcr = vcpu_sme_max_vq(vcpu) - 1;
+	if (has_fa64)
+		new_smcr |= SMCR_ELx_FA64_MASK;
+	if (has_sme2)
+		new_smcr |= SMCR_ELx_EZT0_MASK;
+	if (old_smcr != new_smcr)
+		write_sysreg_s(new_smcr, SYS_SMCR_EL2);
+
+	write_sysreg_el1(__vcpu_sys_reg(vcpu, SMCR_EL1), SYS_SMCR);
+
+	write_sysreg_s(__vcpu_sys_reg(vcpu, SVCR), SYS_SVCR);
+
+	if (vcpu_in_streaming_mode(vcpu)) {
+		*restore_sve = true;
+		*restore_ffr = has_fa64;
+	}
+
+	if (vcpu_za_enabled(vcpu))
+		__sme_restore_state(vcpu_sme_state(vcpu), has_sme2);
+}
+
 static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
 {
 	/*
@@ -350,19 +381,26 @@ static inline void __hyp_sve_restore_guest(struct kvm_vcpu *vcpu)
 	 * vCPU. Start off with the max VL so we can load the SVE state.
 	 */
 	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
-	__sve_restore_state(vcpu_sve_pffr(vcpu),
-			    &vcpu->arch.ctxt.fp_regs.fpsr,
-			    true);
-
-	/*
-	 * The effective VL for a VM could differ from the max VL when running a
-	 * nested guest, as the guest hypervisor could select a smaller VL. Slap
-	 * that into hardware before wrapping up.
-	 */
-	if (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu))
-		sve_cond_update_zcr_vq(__vcpu_sys_reg(vcpu, ZCR_EL2), SYS_ZCR_EL2);
 
 	write_sysreg_el1(__vcpu_sys_reg(vcpu, vcpu_sve_zcr_elx(vcpu)), SYS_ZCR);
+}
+
+static inline void __hyp_nv_restore_guest_vls(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * The effective VL for a VM could differ from the max VL when
+	 * running a nested guest, as the guest hypervisor could
+	 * select a smaller VL. Slap that into hardware before
+	 * wrapping up.
+	 */
+	if (!(vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)))
+		return;
+
+	if (vcpu_has_sve(vcpu))
+		sve_cond_update_zcr_vq(__vcpu_sys_reg(vcpu, ZCR_EL2), SYS_ZCR_EL2);
+
+	if (vcpu_has_sme(vcpu))
+		sme_cond_update_smcr_vq(__vcpu_sys_reg(vcpu, SMCR_EL2), SYS_SMCR_EL2);
 }
 
 static inline void __hyp_sve_save_host(void)
@@ -386,14 +424,18 @@ static void kvm_hyp_save_fpsimd_host(struct kvm_vcpu *vcpu);
  */
 static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 {
-	bool sve_guest;
-	u8 esr_ec;
+	u64 cpacr;
+	bool restore_sve, restore_ffr;
+	bool sve_guest, sme_guest;
+	u8 esr_ec, esr_iss;
 
 	if (!system_supports_fpsimd())
 		return false;
 
 	sve_guest = vcpu_has_sve(vcpu);
+	sme_guest = vcpu_has_sme(vcpu);
 	esr_ec = kvm_vcpu_trap_get_class(vcpu);
+	esr_iss = ESR_ELx_ISS(kvm_vcpu_get_esr(vcpu));
 
 	/* Only handle traps the vCPU can support here: */
 	switch (esr_ec) {
@@ -412,6 +454,15 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		if (guest_hyp_sve_traps_enabled(vcpu))
 			return false;
 		break;
+	case ESR_ELx_EC_SME:
+		if (!sme_guest)
+			return false;
+		if (guest_hyp_sme_traps_enabled(vcpu))
+			return false;
+		if (!kvm_has_sme2(vcpu->kvm) &&
+		    (esr_iss == ESR_ELx_SME_ISS_ZT_DISABLED))
+			return false;
+		break;
 	default:
 		return false;
 	}
@@ -419,10 +470,12 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 	/* Valid trap.  Switch the context: */
 
 	/* First disable enough traps to allow us to update the registers */
+	cpacr = CPACR_ELx_FPEN;
 	if (sve_guest || (is_protected_kvm_enabled() && system_supports_sve()))
-		cpacr_clear_set(0, CPACR_ELx_FPEN | CPACR_ELx_ZEN);
-	else
-		cpacr_clear_set(0, CPACR_ELx_FPEN);
+		cpacr |= CPACR_ELx_ZEN;
+	if (sme_guest)
+		cpacr |= CPACR_ELx_SMEN;
+	cpacr_clear_set(0, cpacr);
 	isb();
 
 	/* Write out the host state if it's in the registers */
@@ -430,8 +483,20 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 		kvm_hyp_save_fpsimd_host(vcpu);
 
 	/* Restore the guest state */
+
+	/* These may be overridden for a SME guest */
+	restore_sve = sve_guest;
+	restore_ffr = sve_guest;
+
 	if (sve_guest)
 		__hyp_sve_restore_guest(vcpu);
+	if (sme_guest)
+		__hyp_sme_restore_guest(vcpu, &restore_sve, &restore_ffr);
+
+	if (restore_sve)
+		__sve_restore_state(vcpu_sve_pffr(vcpu),
+				    &vcpu->arch.ctxt.fp_regs.fpsr,
+				    restore_ffr);
 	else
 		__fpsimd_restore_state(&vcpu->arch.ctxt.fp_regs);
 
@@ -441,6 +506,8 @@ static bool kvm_hyp_handle_fpsimd(struct kvm_vcpu *vcpu, u64 *exit_code)
 	/* Skip restoring fpexc32 for AArch64 guests */
 	if (!(read_sysreg(hcr_el2) & HCR_RW))
 		write_sysreg(__vcpu_sys_reg(vcpu, FPEXC32_EL2), fpexc32_el2);
+
+	__hyp_nv_restore_guest_vls(vcpu);
 
 	*host_data_ptr(fp_owner) = FP_STATE_GUEST_OWNED;
 

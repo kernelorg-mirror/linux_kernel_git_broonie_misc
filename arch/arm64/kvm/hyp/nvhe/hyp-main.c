@@ -26,6 +26,8 @@ void __kvm_hyp_host_forward_smc(struct kvm_cpu_context *host_ctxt);
 
 static void __hyp_sve_save_guest(struct kvm_vcpu *vcpu)
 {
+	bool save_ffr = !vcpu_in_streaming_mode(vcpu) || vcpu_has_fa64(vcpu);
+
 	__vcpu_sys_reg(vcpu, ZCR_EL1) = read_sysreg_el1(SYS_ZCR);
 	/*
 	 * On saving/restoring guest sve state, always use the maximum VL for
@@ -33,7 +35,7 @@ static void __hyp_sve_save_guest(struct kvm_vcpu *vcpu)
 	 * on the VL, so use a consistent (i.e., the maximum) guest VL.
 	 */
 	sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1, SYS_ZCR_EL2);
-	__sve_save_state(vcpu_sve_pffr(vcpu), &vcpu->arch.ctxt.fp_regs.fpsr, true);
+	__sve_save_state(vcpu_sve_pffr(vcpu), &vcpu->arch.ctxt.fp_regs.fpsr, save_ffr);
 	write_sysreg_s(sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SVE]) - 1, SYS_ZCR_EL2);
 }
 
@@ -57,6 +59,38 @@ static void __hyp_sve_restore_host(void)
 	write_sysreg_el1(sve_state->zcr_el1, SYS_ZCR);
 }
 
+static void __hyp_sme_save_guest(struct kvm_vcpu *vcpu)
+{
+	__vcpu_sys_reg(vcpu, SMCR_EL1) = read_sysreg_el1(SYS_SMCR);
+	__vcpu_sys_reg(vcpu, SVCR) = read_sysreg_s(SYS_SVCR);
+
+	sme_cond_update_smcr(vcpu_sme_max_vq(vcpu) - 1, vcpu_has_fa64(vcpu),
+			     vcpu_has_sme2(vcpu), SYS_SMCR_EL2);
+
+	if (vcpu_za_enabled(vcpu))
+		__sme_save_state(vcpu_sme_state(vcpu), vcpu_has_sme2(vcpu));
+}
+
+static void __hyp_sme_restore_host(void)
+{
+	/*
+	 * The hypervisor refuses to run if we are in streaming mode
+	 * or have ZA enabled so there is no SME specific state to
+	 * restore other than the system registers.
+	 *
+	 * Note that this constrains the PE to the maximum shared VL
+	 * that was discovered, if we wish to use larger VLs this will
+	 * need to be revisited.
+	 */
+	sme_cond_update_smcr(sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SME]) - 1,
+			     cpus_have_final_cap(ARM64_SME_FA64),
+			     cpus_have_final_cap(ARM64_SME2), SYS_SMCR_EL2);
+
+	write_sysreg_el1(*host_data_ptr(smcr_el1), SYS_SMCR);
+
+	sme_smstop();
+}
+
 static void fpsimd_sve_flush(void)
 {
 	*host_data_ptr(fp_owner) = FP_STATE_HOST_OWNED;
@@ -69,10 +103,13 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	if (!guest_owns_fp_regs())
 		return;
 
-	cpacr_clear_set(0, CPACR_EL1_FPEN | CPACR_EL1_ZEN);
+	cpacr_clear_set(0, CPACR_EL1_FPEN | CPACR_EL1_ZEN | CPACR_EL1_SMEN);
 	isb();
 
-	if (vcpu_has_sve(vcpu))
+	if (vcpu_has_sme(vcpu))
+		__hyp_sme_save_guest(vcpu);
+
+	if (vcpu_has_sve(vcpu) || vcpu_in_streaming_mode(vcpu))
 		__hyp_sve_save_guest(vcpu);
 	else
 		__fpsimd_save_state(&vcpu->arch.ctxt.fp_regs);
@@ -80,6 +117,9 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 	has_fpmr = kvm_has_fpmr(kern_hyp_va(vcpu->kvm));
 	if (has_fpmr)
 		__vcpu_sys_reg(vcpu, FPMR) = read_sysreg_s(SYS_FPMR);
+
+	if (system_supports_sme())
+		__hyp_sme_restore_host();
 
 	if (system_supports_sve())
 		__hyp_sve_restore_host();
@@ -125,6 +165,8 @@ static void flush_hyp_vcpu(struct pkvm_hyp_vcpu *hyp_vcpu)
 	hyp_vcpu->vcpu.arch.ctxt	= host_vcpu->arch.ctxt;
 
 	hyp_vcpu->vcpu.arch.sve_state	= kern_hyp_va(host_vcpu->arch.sve_state);
+	hyp_vcpu->vcpu.arch.sme_state	= kern_hyp_va(host_vcpu->arch.sme_state);
+
 	/* Limit guest vector length to the maximum supported by the host.  */
 	for (i = 0; i < ARM64_VEC_MAX; i++)
 		hyp_vcpu->vcpu.arch.max_vl[i] = min(host_vcpu->arch.max_vl[i],

@@ -51,8 +51,14 @@ static void __sysreg_save_vel2_state(struct kvm_cpu_context *ctxt)
 		ctxt_sys_reg(ctxt, TTBR1_EL2)	= read_sysreg_el1(SYS_TTBR1);
 		ctxt_sys_reg(ctxt, TCR_EL2)	= read_sysreg_el1(SYS_TCR);
 
-		if (ctxt_has_tcrx(ctxt))
+		if (ctxt_has_tcrx(ctxt)) {
 			ctxt_sys_reg(ctxt, TCR2_EL2) = read_sysreg_el1(SYS_TCR2);
+
+			if (ctxt_has_s1pie(ctxt)) {
+				ctxt_sys_reg(ctxt, PIRE0_EL2) = read_sysreg_el1(SYS_PIRE0);
+				ctxt_sys_reg(ctxt, PIR_EL2) = read_sysreg_el1(SYS_PIR);
+			}
+		}
 
 		/*
 		 * The EL1 view of CNTKCTL_EL1 has a bunch of RES0 bits where
@@ -111,8 +117,14 @@ static void __sysreg_restore_vel2_state(struct kvm_cpu_context *ctxt)
 		write_sysreg_el1(val, SYS_TCR);
 	}
 
-	if (ctxt_has_tcrx(ctxt))
+	if (ctxt_has_tcrx(ctxt)) {
 		write_sysreg_el1(ctxt_sys_reg(ctxt, TCR2_EL2), SYS_TCR2);
+
+		if (ctxt_has_s1pie(ctxt)) {
+			write_sysreg_el1(ctxt_sys_reg(ctxt, PIR_EL2),	SYS_PIR);
+			write_sysreg_el1(ctxt_sys_reg(ctxt, PIRE0_EL2),	SYS_PIRE0);
+		}
+	}
 
 	write_sysreg_el1(ctxt_sys_reg(ctxt, ESR_EL2),	SYS_ESR);
 	write_sysreg_el1(ctxt_sys_reg(ctxt, AFSR0_EL2),	SYS_AFSR0);

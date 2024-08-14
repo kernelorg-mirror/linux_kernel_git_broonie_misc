@@ -13,6 +13,18 @@
 
 #include "internal.h"
 
+static inline void regmap_mas_lock(struct ma_state *mas)
+{
+	if (!mt_external_lock(mas->tree))
+		mas_lock(mas);
+}
+
+static inline void regmap_mas_unlock(struct ma_state *mas)
+{
+	if (!mt_external_lock(mas->tree))
+		mas_unlock(mas);
+}
+
 static int regcache_maple_read(struct regmap *map,
 			       unsigned int reg, unsigned int *value)
 {
@@ -89,12 +101,12 @@ static int regcache_maple_write(struct regmap *map, unsigned int reg,
 	 * is redundant, but we need to take it due to lockdep asserts
 	 * in the maple tree code.
 	 */
-	mas_lock(&mas);
+	regmap_mas_lock(&mas);
 
 	mas_set_range(&mas, index, last);
 	ret = mas_store_gfp(&mas, entry, map->alloc_flags);
 
-	mas_unlock(&mas);
+	regmap_mas_unlock(&mas);
 
 	if (ret == 0) {
 		kfree(lower);
@@ -118,7 +130,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 	lower = NULL;
 	upper = NULL;
 
-	mas_lock(&mas);
+	regmap_mas_lock(&mas);
 
 	mas_for_each(&mas, entry, max) {
 		/*
@@ -126,7 +138,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 		 * Maple lock is redundant, but we need to take it due
 		 * to lockdep asserts in the maple tree code.
 		 */
-		mas_unlock(&mas);
+		regmap_mas_unlock(&mas);
 
 		/* Do we need to save any of this entry? */
 		if (mas.index < min) {
@@ -156,7 +168,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 		}
 
 		kfree(entry);
-		mas_lock(&mas);
+		regmap_mas_lock(&mas);
 		mas_erase(&mas);
 
 		/* Insert new nodes with the saved data */
@@ -178,7 +190,7 @@ static int regcache_maple_drop(struct regmap *map, unsigned int min,
 	}
 
 out:
-	mas_unlock(&mas);
+	regmap_mas_unlock(&mas);
 out_unlocked:
 	kfree(lower);
 	kfree(upper);
@@ -300,11 +312,11 @@ static int regcache_maple_exit(struct regmap *map)
 	if (!mt)
 		return 0;
 
-	mas_lock(&mas);
+	regmap_mas_lock(&mas);
 	mas_for_each(&mas, entry, UINT_MAX)
 		kfree(entry);
 	__mt_destroy(mt);
-	mas_unlock(&mas);
+	regmap_mas_unlock(&mas);
 
 	kfree(mt);
 	map->cache = NULL;
@@ -327,13 +339,13 @@ static int regcache_maple_insert_block(struct regmap *map, int first,
 	for (i = 0; i < last - first + 1; i++)
 		entry[i] = map->reg_defaults[first + i].def;
 
-	mas_lock(&mas);
+	regmap_mas_lock(&mas);
 
 	mas_set_range(&mas, map->reg_defaults[first].reg,
 		      map->reg_defaults[last].reg);
 	ret = mas_store_gfp(&mas, entry, map->alloc_flags);
 
-	mas_unlock(&mas);
+	regmap_mas_unlock(&mas);
 
 	if (ret)
 		kfree(entry);

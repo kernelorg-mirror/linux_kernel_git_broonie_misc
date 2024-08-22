@@ -193,6 +193,9 @@ typedef struct lockdep_map *lockdep_map_p;
 #define mt_set_external_lock(mt, lock)					\
 	(mt)->ma_external_lock = &(lock)->dep_map
 
+#define mt_set_external_lock_dep_map(mt, dep_map)			\
+	(mt)->ma_external_lock = dep_map
+
 #define mt_on_stack(mt)			(mt).ma_external_lock = NULL
 #else
 typedef struct { /* nothing */ } lockdep_map_p;

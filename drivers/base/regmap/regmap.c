@@ -729,12 +729,15 @@ struct regmap *__regmap_init(struct device *dev,
 				map->unlock = regmap_unlock_raw_spinlock;
 				lockdep_set_class_and_name(&map->raw_spinlock,
 							   lock_key, lock_name);
+				regmap_set_lockdep(map,
+						   &map->raw_spinlock.dep_map);
 			} else {
 				spin_lock_init(&map->spinlock);
 				map->lock = regmap_lock_spinlock;
 				map->unlock = regmap_unlock_spinlock;
 				lockdep_set_class_and_name(&map->spinlock,
 							   lock_key, lock_name);
+				regmap_set_lockdep(map, &map->spinlock.dep_map);
 			}
 		} else {
 			mutex_init(&map->mutex);
@@ -743,6 +746,7 @@ struct regmap *__regmap_init(struct device *dev,
 			map->can_sleep = true;
 			lockdep_set_class_and_name(&map->mutex,
 						   lock_key, lock_name);
+			regmap_set_lockdep(map, &map->mutex.dep_map);
 		}
 		map->lock_arg = map;
 	}

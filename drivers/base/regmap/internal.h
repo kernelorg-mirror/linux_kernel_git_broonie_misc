@@ -59,6 +59,9 @@ struct regmap {
 			unsigned long raw_spinlock_flags;
 		};
 	};
+#ifdef CONFIG_LOCKDEP
+	struct lockdep_map *lockdep;
+#endif
 	regmap_lock lock;
 	regmap_unlock unlock;
 	void *lock_arg; /* This is passed to lock/unlock functions */
@@ -343,5 +346,14 @@ struct regmap *__regmap_init_raw_ram(struct device *dev,
 
 #define regmap_init_raw_ram(dev, config, data)				\
 	__regmap_lockdep_wrapper(__regmap_init_raw_ram, #dev, dev, config, data)
+
+#ifdef CONFIG_LOCKDEP
+static inline void regmap_set_lockdep(struct regmap *m, struct lockdep_map *l)
+{
+	m->lockdep = l;
+}
+#else
+#define regmap_set_lockdep(m, l)
+#endif
 
 #endif

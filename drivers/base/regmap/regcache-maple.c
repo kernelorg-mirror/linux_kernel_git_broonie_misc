@@ -365,7 +365,16 @@ static int regcache_maple_init(struct regmap *map)
 		return -ENOMEM;
 	map->cache = mt;
 
+#ifdef CONFIG_LOCKDEP
+	if (map->lockdep) {
+		mt_init_flags(mt, MT_FLAGS_LOCK_EXTERN);
+		mt_set_external_lock_dep_map(mt, map->lockdep);
+	} else {
+		mt_init(mt);
+	}
+#else
 	mt_init(mt);
+#endif
 
 	if (!map->num_reg_defaults)
 		return 0;

@@ -26,7 +26,6 @@ static int ksz9477_i2c_probe(struct i2c_client *i2c)
 
 	for (i = 0; i < __KSZ_NUM_REGMAPS; i++) {
 		rc = ksz9477_regmap_config[i];
-		rc.lock_arg = &dev->regmap_mutex;
 		dev->regmap[i] = devm_regmap_init_i2c(i2c, &rc);
 		if (IS_ERR(dev->regmap[i])) {
 			return dev_err_probe(&i2c->dev, PTR_ERR(dev->regmap[i]),

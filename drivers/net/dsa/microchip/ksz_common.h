@@ -152,7 +152,6 @@ struct ksz_device {
 	const struct ksz_chip_data *info;
 
 	struct mutex dev_mutex;		/* device access */
-	struct mutex regmap_mutex;	/* regmap access */
 	struct mutex alu_mutex;		/* ALU access */
 	struct mutex vlan_mutex;	/* vlan access */
 	const struct ksz_dev_ops *dev_ops;
@@ -600,18 +599,6 @@ static inline int ksz_prmw32(struct ksz_device *dev, int port, int offset,
 			 mask, val);
 }
 
-static inline void ksz_regmap_lock(void *__mtx)
-{
-	struct mutex *mtx = __mtx;
-	mutex_lock(mtx);
-}
-
-static inline void ksz_regmap_unlock(void *__mtx)
-{
-	struct mutex *mtx = __mtx;
-	mutex_unlock(mtx);
-}
-
 static inline bool ksz_is_ksz87xx(struct ksz_device *dev)
 {
 	return dev->chip_id == KSZ8795_CHIP_ID ||
@@ -781,8 +768,6 @@ static inline bool is_lan937x_tx_phy(struct ksz_device *dev, int port)
 		.write_flag_mask =					\
 			KSZ_SPI_OP_FLAG_MASK(KSZ_SPI_OP_WR, swp,	\
 					     regbits, regpad),		\
-		.lock = ksz_regmap_lock,				\
-		.unlock = ksz_regmap_unlock,				\
 		.reg_format_endian = REGMAP_ENDIAN_BIG,			\
 		.val_format_endian = REGMAP_ENDIAN_BIG			\
 	}

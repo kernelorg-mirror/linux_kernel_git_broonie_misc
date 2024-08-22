@@ -105,8 +105,6 @@ static const struct regmap_config ksz8863_regmap_config[] = {
 		.pad_bits = 24,
 		.val_bits = 8,
 		.cache_type = REGCACHE_NONE,
-		.lock = ksz_regmap_lock,
-		.unlock = ksz_regmap_unlock,
 		.max_register = U8_MAX,
 	},
 	{
@@ -115,8 +113,6 @@ static const struct regmap_config ksz8863_regmap_config[] = {
 		.pad_bits = 24,
 		.val_bits = 16,
 		.cache_type = REGCACHE_NONE,
-		.lock = ksz_regmap_lock,
-		.unlock = ksz_regmap_unlock,
 		.max_register = U8_MAX,
 	},
 	{
@@ -125,8 +121,6 @@ static const struct regmap_config ksz8863_regmap_config[] = {
 		.pad_bits = 24,
 		.val_bits = 32,
 		.cache_type = REGCACHE_NONE,
-		.lock = ksz_regmap_lock,
-		.unlock = ksz_regmap_unlock,
 		.max_register = U8_MAX,
 	}
 };
@@ -150,7 +144,6 @@ static int ksz8863_smi_probe(struct mdio_device *mdiodev)
 
 	for (i = 0; i < __KSZ_NUM_REGMAPS; i++) {
 		rc = ksz8863_regmap_config[i];
-		rc.lock_arg = &dev->regmap_mutex;
 		rc.wr_table = chip->wr_table;
 		rc.rd_table = chip->rd_table;
 		dev->regmap[i] = devm_regmap_init(&mdiodev->dev,

@@ -65,7 +65,6 @@ static int ksz_spi_probe(struct spi_device *spi)
 
 	for (i = 0; i < __KSZ_NUM_REGMAPS; i++) {
 		rc = regmap_config[i];
-		rc.lock_arg = &dev->regmap_mutex;
 		rc.wr_table = chip->wr_table;
 		rc.rd_table = chip->rd_table;
 		dev->regmap[i] = devm_regmap_init_spi(spi, &rc);

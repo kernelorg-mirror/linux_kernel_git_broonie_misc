@@ -1037,6 +1037,11 @@ config HAVE_EXIT_THREAD
 	help
 	  An architecture implements exit_thread.
 
+config HAVE_EXIT_THREAD_EARLY
+	bool
+	help
+	  An architecture implements exit_thread_early.
+
 config ARCH_MMAP_RND_BITS_MIN
 	int
 

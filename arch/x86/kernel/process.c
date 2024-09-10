@@ -113,6 +113,14 @@ void arch_release_task_struct(struct task_struct *tsk)
 /*
  * Free thread data structures etc..
  */
+void exit_thread_early(struct task_struct *tsk)
+{
+	shstk_free(tsk);
+}
+
+/*
+ * Free thread data structures etc..
+ */
 void exit_thread(struct task_struct *tsk)
 {
 	struct thread_struct *t = &tsk->thread;
@@ -123,7 +131,6 @@ void exit_thread(struct task_struct *tsk)
 
 	free_vm86(t);
 
-	shstk_free(tsk);
 	fpu__drop(fpu);
 }
 

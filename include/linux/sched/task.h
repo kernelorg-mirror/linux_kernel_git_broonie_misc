@@ -88,6 +88,13 @@ static inline void exit_thread(struct task_struct *tsk)
 {
 }
 #endif
+#ifdef CONFIG_HAVE_EXIT_THREAD_EARLY
+extern void exit_thread_early(struct task_struct *tsk);
+#else
+static inline void exit_thread_early(struct task_struct *tsk)
+{
+}
+#endif
 extern __noreturn void do_group_exit(int);
 
 extern void exit_files(struct task_struct *);

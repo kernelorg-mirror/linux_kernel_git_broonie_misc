@@ -866,6 +866,8 @@ void __noreturn do_exit(long code)
 	tsk->exit_code = code;
 	taskstats_exit(tsk, group_dead);
 
+	exit_thread_early(tsk);
+
 	exit_mm();
 
 	if (group_dead)

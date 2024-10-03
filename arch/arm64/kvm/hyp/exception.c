@@ -160,6 +160,16 @@ static void enter_exception64(struct kvm_vcpu *vcpu, unsigned long target_mode,
 	// PSTATE.BTYPE is set to zero upon any exception to AArch64
 	// See ARM DDI 0487E.a, pages D1-2293 to D1-2294.
 
+	// PSTATE.EXLOCK is set to 0 upon any exception to a higher
+	// EL, or to GCSCR_ELx.EXLOCKEN for an exception to the same
+	// exception level.  See ARM DDI 0487 RWTXBY, D.1.3.2 in K.a.
+	if (kvm_has_gcs(vcpu->kvm) &&
+	    (target_mode & PSR_EL_MASK) == (mode & PSR_EL_MASK)) {
+		u64 gcscr = __vcpu_read_sys_reg(vcpu, GCSCR_EL1);
+		if (gcscr & GCSCR_ELx_EXLOCKEN)
+			new |= PSR_EXLOCK_BIT;
+	}
+
 	new |= PSR_D_BIT;
 	new |= PSR_A_BIT;
 	new |= PSR_I_BIT;

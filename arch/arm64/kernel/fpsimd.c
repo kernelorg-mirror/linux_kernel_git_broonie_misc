@@ -1868,7 +1868,8 @@ void fpsimd_update_current_state(struct user_fpsimd_state const *state)
 	get_cpu_fpsimd_context();
 
 	current->thread.uw.fpsimd_state = *state;
-	if (test_thread_flag(TIF_SVE))
+	/* This should only ever be used for 32 bit processes */
+	if (WARN_ON_ONCE(test_thread_flag(TIF_SVE)))
 		fpsimd_to_sve(current);
 
 	task_fpsimd_load();
@@ -1894,9 +1895,9 @@ void fpsimd_flush_task_state(struct task_struct *t)
 {
 	t->thread.fpsimd_cpu = NR_CPUS;
 	/*
-	 * If we don't support fpsimd, bail out after we have
-	 * reset the fpsimd_cpu for this task and clear the
-	 * FPSTATE.
+	 * If we don't support fpsimd, bail out after we have reset
+	 * the fpsimd_cpu for this task and clear the FPSTATE.  We
+	 * check here rather than forcing callers to check.
 	 */
 	if (!system_supports_fpsimd())
 		return;

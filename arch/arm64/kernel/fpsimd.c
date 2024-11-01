@@ -122,6 +122,43 @@
 static DEFINE_PER_CPU(struct cpu_fp_state, fpsimd_last_state);
 
 /*
+ * Claim ownership of the CPU FPSIMD context for use by the calling context.
+ *
+ * The caller may freely manipulate the FPSIMD context metadata until
+ * put_cpu_fpsimd_context() is called.
+ *
+ * On RT kernels local_bh_disable() is not sufficient because it only
+ * serializes soft interrupt related sections via a local lock, but stays
+ * preemptible. Disabling preemption is the right choice here as bottom
+ * half processing is always in thread context on RT kernels so it
+ * implicitly prevents bottom half processing as well.
+ */
+static void get_cpu_fpsimd_context(void)
+{
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		local_bh_disable();
+	else
+		preempt_disable();
+}
+
+/*
+ * Release the CPU FPSIMD context.
+ *
+ * Must be called from a context in which get_cpu_fpsimd_context() was
+ * previously called, with no call to put_cpu_fpsimd_context() in the
+ * meantime.
+ */
+static void put_cpu_fpsimd_context(void)
+{
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
+		local_bh_enable();
+	else
+		preempt_enable();
+}
+
+static void fpsimd_save_user_state(void);
+
+/*
  * Invalid values stored as the task's last loaded CPU, used to track
  * if the task's floating point state is in use.
  *
@@ -130,10 +167,45 @@ static DEFINE_PER_CPU(struct cpu_fp_state, fpsimd_last_state);
  * the state.
  */
 #define FP_INVALID_CPU_IDLE	(NR_CPUS)      /* No CPU, no user */
+#define FP_INVALID_CPU_MEMORY   (NR_CPUS + 1)  /* The in memory state is in use */
 
 static inline void assert_current_fp_state_idle(void)
 {
 	WARN_ON_ONCE(current->thread.fpsimd_cpu > FP_INVALID_CPU_IDLE);
+}
+
+/*
+ * Ensure that the specified task's floating point state is stored in
+ * memory, must be matched by a call to fp_put_remote_task_state().
+ *
+ * If the task is not current the caller must ensure that it is not
+ * running and will not run while the state is in use.
+ */
+void fp_get_remote_task_state(struct task_struct *task)
+{
+	get_cpu_fpsimd_context();
+
+	/* The state must not be in use by anything else in the kernel. */
+	WARN_ON_ONCE(task->thread.fpsimd_cpu > FP_INVALID_CPU_IDLE);
+
+	/* Ensure the state is in memory */
+	if (task == current)
+		fpsimd_save_user_state();
+
+	task->thread.fpsimd_cpu = FP_INVALID_CPU_MEMORY;
+
+	put_cpu_fpsimd_context();
+}
+
+void fp_put_remote_task_state(struct task_struct *task)
+{
+	get_cpu_fpsimd_context();
+
+	WARN_ON_ONCE(task->thread.fpsimd_cpu != FP_INVALID_CPU_MEMORY);
+
+	fpsimd_flush_task_state(task);
+
+	put_cpu_fpsimd_context();
 }
 
 __ro_after_init struct vl_info vl_info[ARM64_VEC_MAX] = {
@@ -225,41 +297,6 @@ static inline void sme_free(struct task_struct *t) { }
 #endif
 
 static void fpsimd_bind_task_to_cpu(void);
-
-/*
- * Claim ownership of the CPU FPSIMD context for use by the calling context.
- *
- * The caller may freely manipulate the FPSIMD context metadata until
- * put_cpu_fpsimd_context() is called.
- *
- * On RT kernels local_bh_disable() is not sufficient because it only
- * serializes soft interrupt related sections via a local lock, but stays
- * preemptible. Disabling preemption is the right choice here as bottom
- * half processing is always in thread context on RT kernels so it
- * implicitly prevents bottom half processing as well.
- */
-static void get_cpu_fpsimd_context(void)
-{
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
-		local_bh_disable();
-	else
-		preempt_disable();
-}
-
-/*
- * Release the CPU FPSIMD context.
- *
- * Must be called from a context in which get_cpu_fpsimd_context() was
- * previously called, with no call to put_cpu_fpsimd_context() in the
- * meantime.
- */
-static void put_cpu_fpsimd_context(void)
-{
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
-		local_bh_enable();
-	else
-		preempt_enable();
-}
 
 unsigned int task_get_vl(const struct task_struct *task, enum vec_type type)
 {

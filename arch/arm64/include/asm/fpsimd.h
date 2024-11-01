@@ -99,6 +99,19 @@ extern void fpsimd_bind_state_to_cpu(struct cpu_fp_state *fp_state);
 extern void fpsimd_flush_task_state(struct task_struct *target);
 extern void fpsimd_save_and_flush_cpu_state(void);
 
+extern void fp_get_remote_task_state(struct task_struct *task);
+extern void fp_put_remote_task_state(struct task_struct *task);
+
+static inline void fp_get_task_state(void)
+{
+	fp_get_remote_task_state(current);
+}
+
+static inline void fp_put_task_state(void)
+{
+	fp_put_remote_task_state(current);
+}
+
 static inline bool thread_sm_enabled(struct thread_struct *thread)
 {
 	return system_supports_sme() && (thread->svcr & SVCR_SM_MASK);

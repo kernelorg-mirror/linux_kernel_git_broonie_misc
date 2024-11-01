@@ -121,6 +121,21 @@
 
 static DEFINE_PER_CPU(struct cpu_fp_state, fpsimd_last_state);
 
+/*
+ * Invalid values stored as the task's last loaded CPU, used to track
+ * if the task's floating point state is in use.
+ *
+ * Values below NR_CPUS track which CPU the task's floating point state was
+ * last loaded on, values above that track what in the kernel is accessing
+ * the state.
+ */
+#define FP_INVALID_CPU_IDLE	(NR_CPUS)      /* No CPU, no user */
+
+static inline void assert_current_fp_state_idle(void)
+{
+	WARN_ON_ONCE(current->thread.fpsimd_cpu > FP_INVALID_CPU_IDLE);
+}
+
 __ro_after_init struct vl_info vl_info[ARM64_VEC_MAX] = {
 #ifdef CONFIG_ARM64_SVE
 	[ARM64_VEC_SVE] = {
@@ -1839,6 +1854,7 @@ void fpsimd_restore_current_state(void)
 	get_cpu_fpsimd_context();
 
 	if (test_and_clear_thread_flag(TIF_FOREIGN_FPSTATE)) {
+		assert_current_fp_state_idle();
 		task_fpsimd_load();
 		fpsimd_bind_task_to_cpu();
 	}
@@ -1859,7 +1875,7 @@ void fpsimd_restore_current_state(void)
  */
 void fpsimd_flush_task_state(struct task_struct *t)
 {
-	t->thread.fpsimd_cpu = NR_CPUS;
+	t->thread.fpsimd_cpu = FP_INVALID_CPU_IDLE;
 	/*
 	 * If we don't support fpsimd, bail out after we have
 	 * reset the fpsimd_cpu for this task and clear the

@@ -168,6 +168,8 @@ static void fpsimd_save_user_state(void);
  */
 #define FP_INVALID_CPU_IDLE	(NR_CPUS)      /* No CPU, no user */
 #define FP_INVALID_CPU_MEMORY   (NR_CPUS + 1)  /* The in memory state is in use */
+#define FP_INVALID_CPU_REGS	(NR_CPUS + 2)  /* The kernel is using the live state */
+#define FP_INVALID_CPU_REGS_MEM	(NR_CPUS + 3)  /* We fell back to memory access */
 
 static inline void assert_current_fp_state_idle(void)
 {
@@ -176,7 +178,8 @@ static inline void assert_current_fp_state_idle(void)
 
 /*
  * Ensure that the specified task's floating point state is stored in
- * memory, must be matched by a call to fp_put_remote_task_state().
+ * memory for modification, must be matched by a call to
+ * fp_put_remote_task_state().
  *
  * If the task is not current the caller must ensure that it is not
  * running and will not run while the state is in use.
@@ -204,6 +207,58 @@ void fp_put_remote_task_state(struct task_struct *task)
 	WARN_ON_ONCE(task->thread.fpsimd_cpu != FP_INVALID_CPU_MEMORY);
 
 	fpsimd_flush_task_state(task);
+
+	put_cpu_fpsimd_context();
+}
+
+/*
+ * Access the current task's floating point state, supporting either
+ * the state loaded in the registers or the in memory state.  The
+ * caller must check the boolean flag in_regs, if it is true then the
+ * state is in the registers otherwise it is in memory.
+ *
+ * FIXME: Interaction with kernel mode FP?
+ */
+static inline void fp_get_task_state_registers(bool *in_regs)
+{
+	get_cpu_fpsimd_context();
+
+	/* The state must not be in use by anything else in the kernel. */
+	WARN_ON_ONCE(current->thread.fpsimd_cpu > FP_INVALID_CPU_IDLE);
+
+	*in_regs = !test_thread_flag(TIF_FOREIGN_FPSTATE);
+	if (*in_regs) {
+		struct cpu_fp_state const *last =
+			this_cpu_ptr(&fpsimd_last_state);
+
+		/* We must be bound to the current CPU */
+		WARN_ON_ONCE(current->thread.fpsimd_cpu != smp_processor_id());
+		WARN_ON_ONCE(last->st != &current->thread.uw.fpsimd_state);
+
+		current->thread.fpsimd_cpu = FP_INVALID_CPU_REGS;
+	} else {
+		current->thread.fpsimd_cpu = FP_INVALID_CPU_REGS_MEM;
+	}
+}
+
+static inline void fp_put_task_state_registers(bool *in_regs)
+{
+	/* Users should not flush the state to memory */
+	WARN_ON_ONCE(*in_regs != !test_thread_flag(TIF_FOREIGN_FPSTATE));
+
+	if (test_thread_flag(TIF_FOREIGN_FPSTATE)) {
+		struct cpu_fp_state const *last =
+			this_cpu_ptr(&fpsimd_last_state);
+
+		WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS_MEM);
+		WARN_ON_ONCE(last->st != &current->thread.uw.fpsimd_state);
+		fpsimd_flush_task_state(current);
+	} else {
+		if (WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS))
+			pr_crit("INVALID CPU %d\n",
+				current->thread.fpsimd_cpu);
+		current->thread.fpsimd_cpu = smp_processor_id();
+	}
 
 	put_cpu_fpsimd_context();
 }

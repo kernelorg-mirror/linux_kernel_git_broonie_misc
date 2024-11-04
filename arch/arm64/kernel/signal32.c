@@ -141,7 +141,6 @@ static int compat_preserve_vfp_context(struct compat_vfp_sigframe __user *frame)
 
 static int compat_restore_vfp_context(struct compat_vfp_sigframe __user *frame)
 {
-	struct user_fpsimd_state fpsimd;
 	compat_ulong_t magic = VFP_MAGIC;
 	compat_ulong_t size = VFP_STORAGE_SIZE;
 	compat_ulong_t fpscr;
@@ -155,26 +154,31 @@ static int compat_restore_vfp_context(struct compat_vfp_sigframe __user *frame)
 	if (magic != VFP_MAGIC || size != VFP_STORAGE_SIZE)
 		return -EINVAL;
 
+	/*
+	 * Careful: we are about to write directly into thread
+	 * floating point state with preemption enabled, so protection
+	 * is needed to prevent a racing context switch from writing
+	 * stale registers back over the new data. Mark the register
+	 * floating point state as invalid and unbind the task from
+	 * the CPU to force a reload before we return to
+	 * userspace. fpsimd_flush_task_state() has a check for FP
+	 * support.
+	 */
+	fpsimd_flush_task_state(current);
+
 	/* Copy the FP registers into the start of the fpsimd_state. */
 	for (i = 0; i < ARRAY_SIZE(frame->ufp.fpregs); i += 2) {
 		union __fpsimd_vreg vreg;
 
 		__get_user_error(vreg.lo, &frame->ufp.fpregs[i], err);
 		__get_user_error(vreg.hi, &frame->ufp.fpregs[i + 1], err);
-		fpsimd.vregs[i >> 1] = vreg.raw;
+		current->thread.uw.fpsimd_state.vregs[i >> 1] = vreg.raw;
 	}
 
 	/* Extract the fpsr and the fpcr from the fpscr */
 	__get_user_error(fpscr, &frame->ufp.fpscr, err);
-	fpsimd.fpsr = fpscr & VFP_FPSCR_STAT_MASK;
-	fpsimd.fpcr = fpscr & VFP_FPSCR_CTRL_MASK;
-
-	/*
-	 * We don't need to touch the exception register, so
-	 * reload the hardware state.
-	 */
-	if (!err)
-		fpsimd_update_current_state(&fpsimd);
+	current->thread.uw.fpsimd_state.fpsr = fpscr & VFP_FPSCR_STAT_MASK;
+	current->thread.uw.fpsimd_state.fpcr = fpscr & VFP_FPSCR_CTRL_MASK;
 
 	return err ? -EFAULT : 0;
 }

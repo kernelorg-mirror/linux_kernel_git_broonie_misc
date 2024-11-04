@@ -1847,32 +1847,6 @@ void fpsimd_restore_current_state(void)
 }
 
 /*
- * Load an updated userland FPSIMD state for 'current' from memory and set the
- * flag that indicates that the FPSIMD register contents are the most recent
- * FPSIMD state of 'current'. This is used by the signal code to restore the
- * register state when returning from a signal handler in FPSIMD only cases,
- * any SVE context will be discarded.
- */
-void fpsimd_update_current_state(struct user_fpsimd_state const *state)
-{
-	if (WARN_ON(!system_supports_fpsimd()))
-		return;
-
-	get_cpu_fpsimd_context();
-
-	current->thread.uw.fpsimd_state = *state;
-	if (WARN_ON_ONCE(test_thread_flag(TIF_SVE)))
-		fpsimd_to_sve(current);
-
-	task_fpsimd_load();
-	fpsimd_bind_task_to_cpu();
-
-	clear_thread_flag(TIF_FOREIGN_FPSTATE);
-
-	put_cpu_fpsimd_context();
-}
-
-/*
  * Invalidate live CPU copies of task t's FPSIMD state
  *
  * This function may be called with preemption enabled.  The barrier()

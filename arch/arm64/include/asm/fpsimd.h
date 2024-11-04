@@ -101,6 +101,8 @@ extern void fpsimd_save_and_flush_cpu_state(void);
 
 extern void fp_get_remote_task_state(struct task_struct *task);
 extern void fp_put_remote_task_state(struct task_struct *task);
+extern void fp_get_remote_task_state_readonly(struct task_struct *task);
+extern void fp_put_remote_task_state_readonly(struct task_struct *task);
 
 static inline void fp_get_task_state(void)
 {
@@ -110,6 +112,16 @@ static inline void fp_get_task_state(void)
 static inline void fp_put_task_state(void)
 {
 	fp_put_remote_task_state(current);
+}
+
+static inline void fp_get_task_state_readonly(void)
+{
+	fp_get_remote_task_state_readonly(current);
+}
+
+static inline void fp_put_task_state_readonly(void)
+{
+	fp_put_remote_task_state_readonly(current);
 }
 
 static inline bool thread_sm_enabled(struct thread_struct *thread)

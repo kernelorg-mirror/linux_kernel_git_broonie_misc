@@ -212,6 +212,35 @@ void fp_put_remote_task_state(struct task_struct *task)
 }
 
 /*
+ * Ensure that the specified task's floating point state is stored in
+ * memory for readonly access, must be matched by a call to
+ * fp_put_remote_task_state_readonly().
+ *
+ * If the task is not current the caller must ensure that it is not
+ * running and will not run while the state is in use.
+ */
+void fp_get_remote_task_state_readonly(struct task_struct *task)
+{
+	get_cpu_fpsimd_context();
+
+	/* The state must not be in use by anything else in the kernel. */
+	WARN_ON_ONCE(task->thread.fpsimd_cpu > FP_INVALID_CPU_IDLE);
+
+	/* Ensure the state is in memory */
+	if (task == current)
+		fpsimd_save_user_state();
+
+	/* FIXME: asserts */
+
+	put_cpu_fpsimd_context();
+}
+
+void fp_put_remote_task_state_readonly(struct task_struct *task)
+{
+	/* FIXME: asserts */
+}
+
+/*
  * Access the current task's floating point state, supporting either
  * the state loaded in the registers or the in memory state.  The
  * caller must check the boolean flag in_regs, if it is true then the

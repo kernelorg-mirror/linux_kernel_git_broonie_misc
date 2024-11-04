@@ -166,10 +166,11 @@ static void fpsimd_save_user_state(void);
  * last loaded on, values above that track what in the kernel is accessing
  * the state.
  */
-#define FP_INVALID_CPU_IDLE	(NR_CPUS)      /* No CPU, no user */
-#define FP_INVALID_CPU_MEMORY   (NR_CPUS + 1)  /* The in memory state is in use */
-#define FP_INVALID_CPU_REGS	(NR_CPUS + 2)  /* The kernel is using the live state */
-#define FP_INVALID_CPU_REGS_MEM	(NR_CPUS + 3)  /* We fell back to memory access */
+#define FP_INVALID_CPU_IDLE	 (NR_CPUS)	/* No CPU, no user */
+#define FP_INVALID_CPU_MEMORY    (NR_CPUS + 1)	/* The in memory state is in use */
+#define FP_INVALID_CPU_REGS	 (NR_CPUS + 2)	/* The kernel is using the live state */
+#define FP_INVALID_CPU_REGS_MEM	 (NR_CPUS + 3)	/* We fell back to memory access */
+#define FP_INVALID_CPU_CTXSWITCH (NR_CPUS + 4)	/* Performing a context switch */
 
 static inline void assert_current_fp_state_idle(void)
 {
@@ -276,16 +277,15 @@ static inline void fp_put_task_state_registers(bool *in_regs)
 	WARN_ON_ONCE(*in_regs != !test_thread_flag(TIF_FOREIGN_FPSTATE));
 
 	if (test_thread_flag(TIF_FOREIGN_FPSTATE)) {
+		WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS_MEM);
+		fpsimd_flush_task_state(current);
+	} else {
 		struct cpu_fp_state const *last =
 			this_cpu_ptr(&fpsimd_last_state);
 
-		WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS_MEM);
 		WARN_ON_ONCE(last->st != &current->thread.uw.fpsimd_state);
-		fpsimd_flush_task_state(current);
-	} else {
-		if (WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS))
-			pr_crit("INVALID CPU %d\n",
-				current->thread.fpsimd_cpu);
+		WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS);
+
 		current->thread.fpsimd_cpu = smp_processor_id();
 	}
 
@@ -1482,7 +1482,7 @@ void sme_suspend_exit(void)
 
 #endif /* CONFIG_ARM64_SME */
 
-static void sve_init_regs(void)
+static void sve_init_regs(bool in_regs)
 {
 	/*
 	 * Convert the FPSIMD state to SVE, zeroing all the state that
@@ -1503,7 +1503,6 @@ static void sve_init_regs(void)
 	} else {
 		fpsimd_to_sve(current);
 		current->thread.fp_type = FP_STATE_SVE;
-		fpsimd_flush_task_state(current);
 	}
 }
 
@@ -1520,6 +1519,8 @@ static void sve_init_regs(void)
  */
 void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 {
+	bool in_regs;
+
 	/* Even if we chose not to use SVE, the hardware could still trap: */
 	if (unlikely(!system_supports_sve()) || WARN_ON(is_compat_task())) {
 		force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
@@ -1532,7 +1533,7 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 		return;
 	}
 
-	get_cpu_fpsimd_context();
+	fp_get_task_state_registers(&in_regs);
 
 	if (test_and_set_thread_flag(TIF_SVE))
 		WARN_ON(1); /* SVE access shouldn't have trapped */
@@ -1544,9 +1545,9 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 	 * streaming mode state.  Always clear the high bits to avoid
 	 * any potential errors tracking what is properly initialised.
 	 */
-	sve_init_regs();
+	sve_init_regs(in_regs);
 
-	put_cpu_fpsimd_context();
+	fp_put_task_state_registers(&in_regs);
 }
 
 /*
@@ -1562,6 +1563,8 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
  */
 void do_sme_acc(unsigned long esr, struct pt_regs *regs)
 {
+	bool in_regs;
+
 	/* Even if we chose not to use SME, the hardware could still trap: */
 	if (unlikely(!system_supports_sme()) || WARN_ON(is_compat_task())) {
 		force_signal_inject(SIGILL, ILL_ILLOPC, regs->pc, 0);
@@ -1584,23 +1587,21 @@ void do_sme_acc(unsigned long esr, struct pt_regs *regs)
 		return;
 	}
 
-	get_cpu_fpsimd_context();
+	fp_get_task_state_registers(&in_regs);
 
 	/* With TIF_SME userspace shouldn't generate any traps */
 	if (test_and_set_thread_flag(TIF_SME))
 		WARN_ON(1);
 
-	if (!test_thread_flag(TIF_FOREIGN_FPSTATE)) {
+	if (in_regs) {
 		unsigned long vq_minus_one =
 			sve_vq_from_vl(task_get_sme_vl(current)) - 1;
 		sme_set_vq(vq_minus_one);
 
 		fpsimd_bind_task_to_cpu();
-	} else {
-		fpsimd_flush_task_state(current);
 	}
 
-	put_cpu_fpsimd_context();
+	fp_put_task_state_registers(&in_regs);
 }
 
 /*
@@ -1900,6 +1901,15 @@ static void fpsimd_bind_task_to_cpu(void)
 	struct cpu_fp_state *last = this_cpu_ptr(&fpsimd_last_state);
 
 	WARN_ON(!system_supports_fpsimd());
+
+	/*
+	 * We must hold the in-register state, releasing the lock will
+	 * set thread.fpsimd_cpu.
+	 */
+	WARN_ON(current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS &&
+		current->thread.fpsimd_cpu != FP_INVALID_CPU_REGS_MEM &&
+		current->thread.fpsimd_cpu != FP_INVALID_CPU_CTXSWITCH);
+
 	last->st = &current->thread.uw.fpsimd_state;
 	last->sve_state = current->thread.sve_state;
 	last->sme_state = current->thread.sme_state;
@@ -1909,7 +1919,6 @@ static void fpsimd_bind_task_to_cpu(void)
 	last->fpmr = &current->thread.uw.fpmr;
 	last->fp_type = &current->thread.fp_type;
 	last->to_save = FP_STATE_CURRENT;
-	current->thread.fpsimd_cpu = smp_processor_id();
 
 	/*
 	 * Toggle SVE and SME trapping for userspace if needed, these
@@ -1972,13 +1981,22 @@ void fpsimd_restore_current_state(void)
 		return;
 	}
 
+	/*
+	 * Open coded locking since this is the only context switch
+	 * path.
+	 */
 	get_cpu_fpsimd_context();
 
+	assert_current_fp_state_idle();
+	current->thread.fpsimd_cpu = FP_INVALID_CPU_CTXSWITCH;
+
 	if (test_and_clear_thread_flag(TIF_FOREIGN_FPSTATE)) {
-		assert_current_fp_state_idle();
 		task_fpsimd_load();
 		fpsimd_bind_task_to_cpu();
 	}
+
+	WARN_ON_ONCE(current->thread.fpsimd_cpu != FP_INVALID_CPU_CTXSWITCH);
+	current->thread.fpsimd_cpu = smp_processor_id();
 
 	put_cpu_fpsimd_context();
 }

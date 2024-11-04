@@ -838,21 +838,13 @@ static int restore_sigframe(struct pt_regs *regs,
 	if (err == 0)
 		err = parse_user_sigframe(&user, sf);
 
-	/*
-	 * Careful: we are about __copy_from_user() directly into
-	 * thread floating point state with preemption enabled, so
-	 * protection is needed to prevent a racing context switch
-	 * from writing stale registers back over the new data. Mark
-	 * the register floating point state as invalid and unbind the
-	 * task from the CPU to force a reload before we return to
-	 * userspace. fpsimd_flush_task_state() has a check for FP
-	 * support.
-	 */
-	fpsimd_flush_task_state(current);
+	fp_get_task_state();
 
 	if (err == 0 && system_supports_fpsimd()) {
-		if (!user.fpsimd)
+		if (!user.fpsimd) {
+			fp_put_task_state();
 			return -EINVAL;
+		}
 
 		if (user.sve)
 			err = restore_sve_fpsimd_context(&user);
@@ -871,6 +863,8 @@ static int restore_sigframe(struct pt_regs *regs,
 
 	if (err == 0 && system_supports_sme2() && user.zt)
 		err = restore_zt_context(&user);
+
+	fp_put_task_state();
 
 	if (err == 0 && system_supports_poe() && user.poe)
 		err = restore_poe_context(&user);
@@ -1029,6 +1023,8 @@ static int setup_sigframe(struct rt_sigframe_user_layout *user,
 
 	err |= __copy_to_user(&sf->uc.uc_sigmask, set, sizeof(*set));
 
+	fp_get_task_state_readonly();
+
 	if (err == 0 && system_supports_fpsimd()) {
 		struct fpsimd_context __user *fpsimd_ctx =
 			apply_user_offset(user, user->fpsimd_offset);
@@ -1053,27 +1049,12 @@ static int setup_sigframe(struct rt_sigframe_user_layout *user,
 		err |= preserve_sve_context(sve_ctx);
 	}
 
-	/* TPIDR2 if supported */
-	if (system_supports_tpidr2() && err == 0) {
-		struct tpidr2_context __user *tpidr2_ctx =
-			apply_user_offset(user, user->tpidr2_offset);
-		err |= preserve_tpidr2_context(tpidr2_ctx);
-	}
-
 	/* FPMR if supported */
 	if (system_supports_fpmr() && err == 0) {
 		struct fpmr_context __user *fpmr_ctx =
 			apply_user_offset(user, user->fpmr_offset);
 		err |= preserve_fpmr_context(fpmr_ctx);
 	}
-
-	if (system_supports_poe() && err == 0 && user->poe_offset) {
-		struct poe_context __user *poe_ctx =
-			apply_user_offset(user, user->poe_offset);
-
-		err |= preserve_poe_context(poe_ctx);
-	}
-
 
 	/* ZA state if present */
 	if (system_supports_sme() && err == 0 && user->za_offset) {
@@ -1087,6 +1068,22 @@ static int setup_sigframe(struct rt_sigframe_user_layout *user,
 		struct zt_context __user *zt_ctx =
 			apply_user_offset(user, user->zt_offset);
 		err |= preserve_zt_context(zt_ctx);
+	}
+
+	fp_put_task_state_readonly();
+
+	/* TPIDR2 if supported */
+	if (system_supports_tpidr2() && err == 0) {
+		struct tpidr2_context __user *tpidr2_ctx =
+			apply_user_offset(user, user->tpidr2_offset);
+		err |= preserve_tpidr2_context(tpidr2_ctx);
+	}
+
+	if (system_supports_poe() && err == 0 && user->poe_offset) {
+		struct poe_context __user *poe_ctx =
+			apply_user_offset(user, user->poe_offset);
+
+		err |= preserve_poe_context(poe_ctx);
 	}
 
 	if (err == 0 && user->extra_offset) {

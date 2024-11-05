@@ -4,11 +4,7 @@
 #ifndef FP_PTRACE_H
 #define FP_PTRACE_H
 
-#define SVCR_SM_SHIFT 0
-#define SVCR_ZA_SHIFT 1
-
-#define SVCR_SM (1 << SVCR_SM_SHIFT)
-#define SVCR_ZA (1 << SVCR_ZA_SHIFT)
+#include <asm/sysreg.h>
 
 #define HAVE_SVE_SHIFT		0
 #define HAVE_SME_SHIFT		1

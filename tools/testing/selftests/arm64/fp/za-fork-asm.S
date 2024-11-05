@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2021 ARM Limited.
 
+#include <asm/sysreg.h>
 #include "sme-inst.h"
 
 .arch_extension sve
@@ -35,7 +36,7 @@ fork_test:
 .globl verify_fork
 verify_fork:
 	// SVCR should have ZA=1, SM=0
-	mrs	x0, S3_3_C4_C2_2
+	mrs	x0, REG_SVCR
 	and	x1, x0, #3
 	cmp	x1, #2
 	beq	1f

@@ -8,6 +8,11 @@
 // break on a further breakpoint
 //
 
+/* The build system is dumb and doesn't do this for us */
+#define __ASSEMBLY__
+
+#include <asm/sysreg.h>
+
 #include "fp-ptrace.h"
 #include "sme-inst.h"
 
@@ -47,7 +52,7 @@ load_and_save:
 	ldr	x7, [x7, :lo12:svcr_in]
 	// SVCR is 0 by default, avoid triggering SME if not in use
 	cbz	x7, check_sve_in
-	msr	S3_3_C4_C2_2, x7
+	msr	REG_SVCR, x7
 
 	// ZA?
 	tbz	x7, #SVCR_ZA_SHIFT, check_sm_in
@@ -172,7 +177,7 @@ wait_for_writes:
 	adrp	x6, sme_vl_out
 	str	x11, [x6, :lo12:sme_vl_out]
 
-	mrs	x7, S3_3_C4_C2_2
+	mrs	x7, REG_SVCR
 	adrp	x6, svcr_out
 	str	x7, [x6, :lo12:svcr_out]
 
@@ -276,7 +281,7 @@ wait_for_reads:
 
 	// Ensure we don't leave ourselves in streaming mode
 	tbz	x0, #HAVE_SME_SHIFT, out
-	msr	S3_3_C4_C2_2, xzr
+	msr	REG_SVCR, xzr
 
 out:
 	ldp	x11, x12, [sp, #-0x10]

@@ -3,7 +3,13 @@
 # A proper top_srcdir is needed by KSFT(lib.mk)
 top_srcdir = $(realpath ../../../../../)
 
-CFLAGS += $(KHDR_INCLUDES)
+ARCH_TOOLS_INCLUDES=\
+	-I${top_srcdir}/tools/include \
+	-I${top_srcdir}/tools/arch/arm64/include \
+	-I${top_srcdir}/tools/arch/arm64/include/generated
+
+CFLAGS += $(KHDR_INCLUDES) $(ARCH_TOOLS_INCLUDES)
+ASFLAGS += -D__ASSEMBLY__ $(ARCH_TOOLS_INCLUDES)
 
 TEST_GEN_PROGS := \
 	fp-ptrace \
@@ -26,18 +32,18 @@ EXTRA_CLEAN += $(OUTPUT)/asm-utils.o $(OUTPUT)/rdvl.o $(OUTPUT)/za-fork-asm.o
 
 # Build with nolibc to avoid effects due to libc's clone() support
 $(OUTPUT)/fp-pidbench: fp-pidbench.S $(OUTPUT)/asm-utils.o
-	$(CC) -nostdlib $^ -o $@
+	$(CC) $(ASFLAGS) -nostdlib $^ -o $@
 $(OUTPUT)/fp-ptrace: fp-ptrace.c fp-ptrace-asm.S
 $(OUTPUT)/fpsimd-test: fpsimd-test.S $(OUTPUT)/asm-utils.o
-	$(CC) -nostdlib $^ -o $@
+	$(CC) $(ASFLAGS) -nostdlib $^ -o $@
 $(OUTPUT)/rdvl-sve: rdvl-sve.c $(OUTPUT)/rdvl.o
 $(OUTPUT)/rdvl-sme: rdvl-sme.c $(OUTPUT)/rdvl.o
 $(OUTPUT)/sve-ptrace: sve-ptrace.c
 $(OUTPUT)/sve-probe-vls: sve-probe-vls.c $(OUTPUT)/rdvl.o
 $(OUTPUT)/sve-test: sve-test.S $(OUTPUT)/asm-utils.o
-	$(CC) -nostdlib $^ -o $@
+	$(CC) $(ASFLAGS) -nostdlib $^ -o $@
 $(OUTPUT)/ssve-test: sve-test.S $(OUTPUT)/asm-utils.o
-	$(CC) -DSSVE -nostdlib $^ -o $@
+	$(CC) -DSSVE $(ASFLAGS) -nostdlib $^ -o $@
 $(OUTPUT)/vec-syscfg: vec-syscfg.c $(OUTPUT)/rdvl.o
 $(OUTPUT)/vlset: vlset.c
 $(OUTPUT)/za-fork: za-fork.c $(OUTPUT)/za-fork-asm.o
@@ -46,9 +52,9 @@ $(OUTPUT)/za-fork: za-fork.c $(OUTPUT)/za-fork-asm.o
 		-static -ffreestanding -Wall $^ -o $@
 $(OUTPUT)/za-ptrace: za-ptrace.c
 $(OUTPUT)/za-test: za-test.S $(OUTPUT)/asm-utils.o
-	$(CC) -nostdlib $^ -o $@
+	$(CC) $(ASFLAGS) -nostdlib $^ -o $@
 $(OUTPUT)/zt-ptrace: zt-ptrace.c
 $(OUTPUT)/zt-test: zt-test.S $(OUTPUT)/asm-utils.o
-	$(CC) -nostdlib $^ -o $@
+	$(CC) $(ASFLAGS) -nostdlib $^ -o $@
 
 include ../../lib.mk

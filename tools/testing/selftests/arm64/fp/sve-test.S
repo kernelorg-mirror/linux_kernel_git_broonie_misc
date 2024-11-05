@@ -10,6 +10,7 @@
 // (leave it running for as long as you want...)
 // kill $pids
 
+#include <asm/sysreg.h>
 #include <asm/unistd.h>
 #include "assembler.h"
 #include "asm-offsets.h"
@@ -474,7 +475,7 @@ function _start
 //	svc	#0
 
 #ifdef SSVE
-	mrs	x0, S3_3_C4_C2_2	// SVCR should have ZA=0,SM=1
+	mrs	x0, REG_SVCR	// SVCR should have ZA=0,SM=1
 	and	x1, x0, #3
 	cmp	x1, #1
 	b.ne	svcr_barf
@@ -516,7 +517,7 @@ function barf
 	mov	x12, x2	// data size
 
 #ifdef SSVE
-	mrs	x13, S3_3_C4_C2_2
+	mrs	x13, REG_SVCR
 #endif
 
 	puts	"Mismatch: PID="

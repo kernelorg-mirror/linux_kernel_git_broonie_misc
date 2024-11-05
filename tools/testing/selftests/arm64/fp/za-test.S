@@ -10,6 +10,8 @@
 // (leave it running for as long as you want...)
 // kill $pids
 
+
+#include <asm/sysreg.h>
 #include <asm/unistd.h>
 #include "assembler.h"
 #include "asm-offsets.h"
@@ -305,7 +307,7 @@ function _start
 1:
 	svc	#0
 
-	mrs	x0, S3_3_C4_C2_2	// SVCR should have ZA=1,SM=0
+	mrs	x0, REG_SVCR	// SVCR should have ZA=1,SM=0
 	and	x1, x0, #3
 	cmp	x1, #2
 	b.ne	svcr_barf
@@ -334,7 +336,7 @@ function barf
 //	svc	#0
 // end hack
 
-	mrs	x13, S3_3_C4_C2_2
+	mrs	x13, REG_SVCR
 
 	smstop
 	mov	x10, x0	// expected data

@@ -27,6 +27,8 @@
 #include <asm/sve_context.h>
 #include <asm/ptrace.h>
 
+#include <asm/sysreg.h>
+
 #include "../../kselftest.h"
 
 #include "fp-ptrace.h"

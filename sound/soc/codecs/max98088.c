@@ -301,7 +301,7 @@ static const struct regmap_config max98088_regmap = {
 
 	.reg_defaults = max98088_reg,
 	.num_reg_defaults = ARRAY_SIZE(max98088_reg),
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 /*

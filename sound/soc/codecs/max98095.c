@@ -238,7 +238,7 @@ static const struct regmap_config max98095_regmap = {
 	.reg_defaults = max98095_reg_def,
 	.num_reg_defaults = ARRAY_SIZE(max98095_reg_def),
 	.max_register = M98095_0FF_REV_ID,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 
 	.readable_reg = max98095_readable,
 	.writeable_reg = max98095_writeable,

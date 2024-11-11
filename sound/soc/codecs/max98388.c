@@ -883,7 +883,7 @@ static const struct regmap_config max98388_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98388_reg),
 	.readable_reg = max98388_readable_register,
 	.volatile_reg = max98388_volatile_reg,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const struct snd_soc_component_driver soc_codec_dev_max98388 = {

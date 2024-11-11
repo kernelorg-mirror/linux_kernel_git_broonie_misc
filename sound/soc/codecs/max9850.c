@@ -46,7 +46,7 @@ static const struct regmap_config max9850_regmap = {
 
 	.max_register = MAX9850_DIGITAL_AUDIO,
 	.volatile_reg = max9850_volatile_register,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const DECLARE_TLV_DB_RANGE(max9850_tlv,

@@ -1656,7 +1656,7 @@ static const struct regmap_config max98396_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98396_reg),
 	.readable_reg = max98396_readable_register,
 	.volatile_reg = max98396_volatile_reg,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const struct regmap_config max98397_regmap = {
@@ -1667,7 +1667,7 @@ static const struct regmap_config max98397_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98397_reg),
 	.readable_reg = max98397_readable_register,
 	.volatile_reg = max98397_volatile_reg,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static void max98396_read_device_property(struct device *dev,

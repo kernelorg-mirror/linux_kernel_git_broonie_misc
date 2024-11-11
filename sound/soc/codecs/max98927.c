@@ -777,7 +777,7 @@ static const struct regmap_config max98927_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98927_reg),
 	.readable_reg	  = max98927_readable_register,
 	.volatile_reg	  = max98927_volatile_reg,
-	.cache_type       = REGCACHE_RBTREE,
+	.cache_type       = REGCACHE_MAPLE,
 };
 
 static void max98927_slot_config(struct i2c_client *i2c,

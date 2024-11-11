@@ -665,7 +665,7 @@ static const struct regmap_config max98520_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98520_reg),
 	.readable_reg = max98520_readable_register,
 	.volatile_reg = max98520_volatile_reg,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static void max98520_power_on(struct max98520_priv *max98520, bool poweron)

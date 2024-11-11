@@ -506,7 +506,7 @@ static const struct regmap_config max98926_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98926_reg),
 	.volatile_reg	= max98926_volatile_register,
 	.readable_reg	= max98926_readable_register,
-	.cache_type		= REGCACHE_RBTREE,
+	.cache_type	= REGCACHE_MAPLE,
 };
 
 static int max98926_i2c_probe(struct i2c_client *i2c)

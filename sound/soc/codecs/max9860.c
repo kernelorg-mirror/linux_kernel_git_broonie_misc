@@ -120,7 +120,7 @@ static const struct regmap_config max9860_regmap = {
 	.max_register = MAX9860_MAX_REGISTER,
 	.reg_defaults = max9860_reg_defaults,
 	.num_reg_defaults = ARRAY_SIZE(max9860_reg_defaults),
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const DECLARE_TLV_DB_SCALE(dva_tlv, -9100, 100, 1);

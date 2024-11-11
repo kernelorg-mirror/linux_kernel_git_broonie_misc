@@ -994,7 +994,7 @@ static const struct regmap_config max98390_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98390_reg_defaults),
 	.readable_reg	  = max98390_readable_register,
 	.volatile_reg	  = max98390_volatile_reg,
-	.cache_type       = REGCACHE_RBTREE,
+	.cache_type       = REGCACHE_MAPLE,
 };
 
 static void max98390_slot_config(struct i2c_client *i2c,

@@ -240,7 +240,7 @@ static const struct regmap_config max98373_sdw_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98373_reg),
 	.readable_reg = max98373_readable_register,
 	.volatile_reg = max98373_volatile_reg,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 	.use_single_read = true,
 	.use_single_write = true,
 };

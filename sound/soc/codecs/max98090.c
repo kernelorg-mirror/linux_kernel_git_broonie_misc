@@ -2530,7 +2530,7 @@ static const struct regmap_config max98090_regmap = {
 	.num_reg_defaults = ARRAY_SIZE(max98090_reg),
 	.volatile_reg = max98090_volatile_register,
 	.readable_reg = max98090_readable_register,
-	.cache_type = REGCACHE_RBTREE,
+	.cache_type = REGCACHE_MAPLE,
 };
 
 static const struct i2c_device_id max98090_i2c_id[] = {

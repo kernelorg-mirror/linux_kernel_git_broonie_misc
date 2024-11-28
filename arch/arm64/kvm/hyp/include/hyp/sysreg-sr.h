@@ -16,8 +16,6 @@
 #include <asm/kvm_hyp.h>
 #include <asm/kvm_mmu.h>
 
-static inline bool ctxt_has_s1poe(struct kvm_cpu_context *ctxt);
-
 static inline struct kvm_vcpu *ctxt_to_vcpu(struct kvm_cpu_context *ctxt)
 {
 	struct kvm_vcpu *vcpu = ctxt->__hyp_running_vcpu;
@@ -26,6 +24,46 @@ static inline struct kvm_vcpu *ctxt_to_vcpu(struct kvm_cpu_context *ctxt)
 		vcpu = container_of(ctxt, struct kvm_vcpu, arch.ctxt);
 
 	return vcpu;
+}
+
+static inline bool ctxt_has_mte(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu = ctxt_to_vcpu(ctxt);
+
+	return kvm_has_mte(kern_hyp_va(vcpu->kvm));
+}
+
+static inline bool ctxt_has_s1pie(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!cpus_have_final_cap(ARM64_HAS_S1PIE))
+		return false;
+
+	vcpu = ctxt_to_vcpu(ctxt);
+	return kvm_has_s1pie(kern_hyp_va(vcpu->kvm));
+}
+
+static inline bool ctxt_has_tcrx(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!cpus_have_final_cap(ARM64_HAS_TCR2))
+		return false;
+
+	vcpu = ctxt_to_vcpu(ctxt);
+	return kvm_has_tcr2(kern_hyp_va(vcpu->kvm));
+}
+
+static inline bool ctxt_has_s1poe(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!system_supports_poe())
+		return false;
+
+	vcpu = ctxt_to_vcpu(ctxt);
+	return kvm_has_s1poe(kern_hyp_va(vcpu->kvm));
 }
 
 static inline bool ctxt_is_guest(struct kvm_cpu_context *ctxt)
@@ -67,46 +105,6 @@ static inline void __sysreg_save_user_state(struct kvm_cpu_context *ctxt)
 {
 	ctxt_sys_reg(ctxt, TPIDR_EL0)	= read_sysreg(tpidr_el0);
 	ctxt_sys_reg(ctxt, TPIDRRO_EL0)	= read_sysreg(tpidrro_el0);
-}
-
-static inline bool ctxt_has_mte(struct kvm_cpu_context *ctxt)
-{
-	struct kvm_vcpu *vcpu = ctxt_to_vcpu(ctxt);
-
-	return kvm_has_mte(kern_hyp_va(vcpu->kvm));
-}
-
-static inline bool ctxt_has_s1pie(struct kvm_cpu_context *ctxt)
-{
-	struct kvm_vcpu *vcpu;
-
-	if (!cpus_have_final_cap(ARM64_HAS_S1PIE))
-		return false;
-
-	vcpu = ctxt_to_vcpu(ctxt);
-	return kvm_has_s1pie(kern_hyp_va(vcpu->kvm));
-}
-
-static inline bool ctxt_has_tcrx(struct kvm_cpu_context *ctxt)
-{
-	struct kvm_vcpu *vcpu;
-
-	if (!cpus_have_final_cap(ARM64_HAS_TCR2))
-		return false;
-
-	vcpu = ctxt_to_vcpu(ctxt);
-	return kvm_has_tcr2(kern_hyp_va(vcpu->kvm));
-}
-
-static inline bool ctxt_has_s1poe(struct kvm_cpu_context *ctxt)
-{
-	struct kvm_vcpu *vcpu;
-
-	if (!system_supports_poe())
-		return false;
-
-	vcpu = ctxt_to_vcpu(ctxt);
-	return kvm_has_s1poe(kern_hyp_va(vcpu->kvm));
 }
 
 static inline void __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)

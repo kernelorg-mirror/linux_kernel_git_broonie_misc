@@ -151,6 +151,41 @@ void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu)
 	}
 }
 
+static void kvm_vcpu_put_sve(struct kvm_vcpu *vcpu)
+{
+	u64 zcr;
+
+	if (!vcpu_has_sve(vcpu))
+		return;
+
+	zcr = read_sysreg_el1(SYS_ZCR);
+
+	/*
+	 * If the vCPU is in the hyp context then ZCR_EL1 is loaded
+	 * with its vEL2 counterpart.
+	 */
+	__vcpu_sys_reg(vcpu, vcpu_sve_zcr_elx(vcpu)) = zcr;
+
+	/*
+	 * Restore the VL that was saved when bound to the CPU, which
+	 * is the maximum VL for the guest. Because the layout of the
+	 * data when saving the sve state depends on the VL, we need
+	 * to use a consistent (i.e., the maximum) VL.  Note that this
+	 * means that at guest exit ZCR_EL1 is not necessarily the
+	 * same as on guest entry.
+	 *
+	 * ZCR_EL2 holds the guest hypervisor's VL when running a
+	 * nested guest, which could be smaller than the max for the
+	 * vCPU. Similar to above, we first need to switch to a VL
+	 * consistent with the layout of the vCPU's SVE state. KVM
+	 * support for NV implies VHE, so using the ZCR_EL1 alias is
+	 * safe.
+	 */
+	if (!has_vhe() || (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)))
+		sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1,
+				       SYS_ZCR_EL1);
+}
+
 /*
  * Write back the vcpu FPSIMD regs if they are dirty, and invalidate the
  * cpu FPSIMD regs so that they can't be spuriously reused if this vcpu
@@ -179,38 +214,10 @@ void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu)
 	}
 
 	if (guest_owns_fp_regs()) {
-		if (vcpu_has_sve(vcpu)) {
-			u64 zcr = read_sysreg_el1(SYS_ZCR);
-
-			/*
-			 * If the vCPU is in the hyp context then ZCR_EL1 is
-			 * loaded with its vEL2 counterpart.
-			 */
-			__vcpu_sys_reg(vcpu, vcpu_sve_zcr_elx(vcpu)) = zcr;
-
-			/*
-			 * Restore the VL that was saved when bound to the CPU,
-			 * which is the maximum VL for the guest. Because the
-			 * layout of the data when saving the sve state depends
-			 * on the VL, we need to use a consistent (i.e., the
-			 * maximum) VL.
-			 * Note that this means that at guest exit ZCR_EL1 is
-			 * not necessarily the same as on guest entry.
-			 *
-			 * ZCR_EL2 holds the guest hypervisor's VL when running
-			 * a nested guest, which could be smaller than the
-			 * max for the vCPU. Similar to above, we first need to
-			 * switch to a VL consistent with the layout of the
-			 * vCPU's SVE state. KVM support for NV implies VHE, so
-			 * using the ZCR_EL1 alias is safe.
-			 */
-			if (!has_vhe() || (vcpu_has_nv(vcpu) && !is_hyp_ctxt(vcpu)))
-				sve_cond_update_zcr_vq(vcpu_sve_max_vq(vcpu) - 1,
-						       SYS_ZCR_EL1);
-		}
+		kvm_vcpu_put_sve(vcpu);
 
 		/*
-		 * Flush (save and invalidate) the fpsimd/sve state so that if
+		 * Flush (save and invalidate) the FP state so that if
 		 * the host tries to use fpsimd/sve, it's not using stale data
 		 * from the guest.
 		 *

@@ -39,7 +39,7 @@
 #ifdef CONFIG_ARM64_GCS
 #define GCS_SIGNAL_CAP(addr) (((unsigned long)addr) & GCS_CAP_ADDR_MASK)
 
-static bool gcs_signal_cap_valid(u64 addr, u64 val)
+static bool gcs_signal_cap_valid(unsigned long __user *addr, u64 val)
 {
 	return val == GCS_SIGNAL_CAP(addr);
 }
@@ -1094,15 +1094,15 @@ static int gcs_restore_signal(void)
 	/*
 	 * Check that the cap is the actual GCS before replacing it.
 	 */
-	if (!gcs_signal_cap_valid((u64)gcspr_el0, cap))
+	if (!gcs_signal_cap_valid(gcspr_el0, cap))
 		return -EINVAL;
 
 	/* Invalidate the token to prevent reuse */
-	put_user_gcs(0, (__user void*)gcspr_el0, &ret);
+	put_user_gcs(0, gcspr_el0, &ret);
 	if (ret != 0)
 		return -EFAULT;
 
-	write_sysreg_s(gcspr_el0 + 1, SYS_GCSPR_EL0);
+	write_sysreg_s((__force u64)(gcspr_el0 + 1), SYS_GCSPR_EL0);
 
 	return 0;
 }

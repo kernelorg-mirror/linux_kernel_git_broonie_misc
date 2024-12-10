@@ -402,6 +402,18 @@ static inline size_t sme_state_size(struct task_struct const *task)
 	return size;
 }
 
+#define sme_cond_update_smcr(vl, fa64, zt0, reg)		\
+	do {							\
+		u64 __old = read_sysreg_s((reg));		\
+		u64 __new = vl;					\
+		if (fa64)			\
+			__new |= SMCR_ELx_FA64;			\
+		if (zt0)					\
+			__new |= SMCR_ELx_EZT0;			\
+		if (__old != __new)				\
+			write_sysreg_s(__new, (reg));		\
+	} while (0)
+
 #else
 
 static inline void sme_user_disable(void) { BUILD_BUG(); }
@@ -424,6 +436,8 @@ static inline size_t sme_state_size(struct task_struct const *task)
 {
 	return 0;
 }
+
+#define sme_cond_update_smcr(val, fa64, zt0, reg) do { } while (0)
 
 #endif /* ! CONFIG_ARM64_SME */
 

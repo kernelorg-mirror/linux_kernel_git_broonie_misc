@@ -122,21 +122,6 @@ static const struct ftr_set_desc pfr0 __prel64_initconst = {
 	},
 };
 
-static bool __init pfr1_sme_filter(u64 val)
-{
-	/*
-	 * Similarly to SVE, disabling SME also means disabling all
-	 * the features that are associated with it. Just set
-	 * id_aa64smfr0_el1 to 0 and don't look back.
-	 */
-	if (!val) {
-		id_aa64smfr0_override.val = 0;
-		id_aa64smfr0_override.mask = GENMASK(63, 0);
-	}
-
-	return true;
-}
-
 static const struct ftr_set_desc pfr1 __prel64_initconst = {
 	.name		= "id_aa64pfr1",
 	.override	= &id_aa64pfr1_override,
@@ -144,7 +129,6 @@ static const struct ftr_set_desc pfr1 __prel64_initconst = {
 		FIELD("bt", ID_AA64PFR1_EL1_BT_SHIFT, NULL ),
 		FIELD("gcs", ID_AA64PFR1_EL1_GCS_SHIFT, NULL),
 		FIELD("mte", ID_AA64PFR1_EL1_MTE_SHIFT, NULL),
-		FIELD("sme", ID_AA64PFR1_EL1_SME_SHIFT, pfr1_sme_filter),
 		{}
 	},
 };

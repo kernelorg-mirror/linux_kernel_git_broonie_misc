@@ -458,9 +458,6 @@
 	arm64.nopauth	[ARM64] Unconditionally disable Pointer Authentication
 			support
 
-	arm64.nosme	[ARM64] Unconditionally disable Scalable Matrix
-			Extension support
-
 	arm64.nosve	[ARM64] Unconditionally disable Scalable Vector
 			Extension support
 

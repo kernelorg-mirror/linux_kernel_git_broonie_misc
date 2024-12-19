@@ -100,8 +100,21 @@ static void fpsimd_sve_sync(struct kvm_vcpu *vcpu)
 {
 	bool has_fpmr;
 
-	if (!guest_owns_fp_regs())
+	if (!guest_owns_fp_regs()) {
+		/*
+		 * We always restore SVCR for SME guests to ensure
+		 * exceptions within the guest are delivered with the
+		 * right type, always reset it to the fixed host
+		 * value.
+		 */
+		if (vcpu_has_sme(vcpu)) {
+			cpacr_clear_set(0, CPACR_EL1_SMEN);
+			isb();
+
+			sme_smstop();
+		}
 		return;
+	}
 
 	cpacr_clear_set(0, CPACR_EL1_FPEN | CPACR_EL1_ZEN | CPACR_EL1_SMEN);
 	isb();
@@ -249,10 +262,9 @@ static void handle___kvm_vcpu_run(struct kvm_cpu_context *host_ctxt)
 		struct pkvm_hyp_vcpu *hyp_vcpu = pkvm_get_loaded_hyp_vcpu();
 
 		/*
-		 * KVM (and pKVM) doesn't support SME guests for now, and
-		 * ensures that SME features aren't enabled in pstate when
-		 * loading a vcpu. Therefore, if SME features enabled the host
-		 * is misbehaving.
+		 * KVM (and pKVM) refuses to run if PSTATE.{SM,ZA} are
+		 * enabled. Therefore, if SME features enabled the
+		 * host is misbehaving.
 		 */
 		if (unlikely(system_supports_sme() && read_sysreg_s(SYS_SVCR))) {
 			ret = -EINVAL;

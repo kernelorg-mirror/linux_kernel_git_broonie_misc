@@ -35,12 +35,37 @@ DEFINE_PER_CPU(unsigned long, kvm_hyp_vector);
 
 extern void kvm_nvhe_prepare_backtrace(unsigned long fp, unsigned long pc);
 
+static void __activate_traps_sme(struct kvm_vcpu *vcpu)
+{
+	if (!vcpu_has_sme(vcpu))
+		return;
+
+	if (__vcpu_sys_reg(vcpu, SVCR) == read_sysreg_s(SYS_SVCR))
+		return;
+
+	/*
+	 * Write out the host state if it's in the registers,
+	 * updating SVCR will invalidate it.
+	 */
+	if (host_owns_fp_regs())
+		kvm_hyp_save_fpsimd_host(vcpu);
+
+	/*
+	 * Always restore SVCR to ensure that exceptions delivered
+	 * directly within the guest have the correct type.
+	 */
+	write_sysreg_s(__vcpu_sys_reg(vcpu, SVCR), SYS_SVCR);
+	*host_data_ptr(fp_owner) = FP_STATE_FREE;
+}
+
 static void __activate_cptr_traps(struct kvm_vcpu *vcpu)
 {
 	u64 val = CPTR_EL2_TAM;	/* Same bit irrespective of E2H */
 
-	if (!guest_owns_fp_regs())
+	if (!guest_owns_fp_regs()) {
 		__activate_traps_fpsimd32(vcpu);
+		__activate_traps_sme(vcpu);
+	}
 
 	if (has_hvhe()) {
 		val |= CPACR_EL1_TTA;
@@ -49,17 +74,16 @@ static void __activate_cptr_traps(struct kvm_vcpu *vcpu)
 			val |= CPACR_EL1_FPEN;
 			if (vcpu_has_sve(vcpu))
 				val |= CPACR_EL1_ZEN;
+			if (vcpu_has_sme(vcpu))
+				val |= CPACR_EL1_SMEN;
 		}
 
 		write_sysreg(val, cpacr_el1);
 	} else {
 		val |= CPTR_EL2_TTA | CPTR_NVHE_EL2_RES1;
 
-		/*
-		 * Always trap SME since it's not supported in KVM.
-		 * TSM is RES1 if SME isn't implemented.
-		 */
-		val |= CPTR_EL2_TSM;
+		if (!vcpu_has_sme(vcpu) || !guest_owns_fp_regs())
+			val |= CPTR_EL2_TSM;
 
 		if (!vcpu_has_sve(vcpu) || !guest_owns_fp_regs())
 			val |= CPTR_EL2_TZ;
@@ -222,6 +246,7 @@ static const exit_handler_fn hyp_exit_handlers[] = {
 	[ESR_ELx_EC_CP15_32]		= kvm_hyp_handle_cp15_32,
 	[ESR_ELx_EC_SYS64]		= kvm_hyp_handle_sysreg,
 	[ESR_ELx_EC_SVE]		= kvm_hyp_handle_fpsimd,
+	[ESR_ELx_EC_SME]		= kvm_hyp_handle_fpsimd,
 	[ESR_ELx_EC_FP_ASIMD]		= kvm_hyp_handle_fpsimd,
 	[ESR_ELx_EC_IABT_LOW]		= kvm_hyp_handle_iabt_low,
 	[ESR_ELx_EC_DABT_LOW]		= kvm_hyp_handle_dabt_low,
@@ -233,7 +258,8 @@ static const exit_handler_fn pvm_exit_handlers[] = {
 	[0 ... ESR_ELx_EC_MAX]		= NULL,
 	[ESR_ELx_EC_SYS64]		= kvm_handle_pvm_sys64,
 	[ESR_ELx_EC_SVE]		= kvm_handle_pvm_restricted,
-	[ESR_ELx_EC_FP_ASIMD]		= kvm_hyp_handle_fpsimd,
+	[ESR_ELx_EC_SME]		= kvm_handle_pvm_restricted,
+	[ESR_ELx_EC_FP_ASIMD]		= kvm_handle_pvm_restricted,
 	[ESR_ELx_EC_IABT_LOW]		= kvm_hyp_handle_iabt_low,
 	[ESR_ELx_EC_DABT_LOW]		= kvm_hyp_handle_dabt_low,
 	[ESR_ELx_EC_WATCHPT_LOW]	= kvm_hyp_handle_watchpt_low,

@@ -624,14 +624,14 @@ static __always_inline void __kvm_reset_cptr_el2(struct kvm *kvm)
 
 		if (!kvm_has_sve(kvm) || !guest_owns_fp_regs())
 			val |= CPACR_ELx_ZEN;
-		if (cpus_have_final_cap(ARM64_SME))
+		if (!kvm_has_sme(kvm) || !guest_owns_fp_regs())
 			val |= CPACR_ELx_SMEN;
 	} else {
 		val = CPTR_NVHE_EL2_RES1;
 
 		if (kvm_has_sve(kvm) && guest_owns_fp_regs())
 			val |= CPTR_EL2_TZ;
-		if (!cpus_have_final_cap(ARM64_SME))
+		if (kvm_has_sme(kvm) && guest_owns_fp_regs())
 			val |= CPTR_EL2_TSM;
 	}
 

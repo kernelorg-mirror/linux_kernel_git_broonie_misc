@@ -487,6 +487,12 @@ void handle_trap(struct kvm_cpu_context *host_ctxt)
 		sve_cond_update_zcr_vq(sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SVE]) - 1,
 				       SYS_ZCR_EL2);
 		break;
+	case ESR_ELx_EC_SME:
+		cpacr_clear_set(0, CPACR_ELx_SMEN);
+		isb();
+		sme_cond_update_smcr_vq(sve_vq_from_vl(kvm_host_max_vl[ARM64_VEC_SME]) - 1,
+					SYS_SMCR_EL2);
+		break;
 	case ESR_ELx_EC_IABT_LOW:
 	case ESR_ELx_EC_DABT_LOW:
 		handle_host_mem_abort(host_ctxt);

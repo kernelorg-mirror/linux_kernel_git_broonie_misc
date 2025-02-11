@@ -840,10 +840,11 @@ static void limit_nv_id_regs(struct kvm *kvm)
 	val |= FIELD_PREP(NV_FTR(PFR0, EL3), 0b0001);
 	kvm_set_vm_id_reg(kvm, SYS_ID_AA64PFR0_EL1, val);
 
-	/* Only support BTI, SSBS, CSV2_frac */
+	/* Only support BTI, SSBS, CSV2_frac and SME */
 	val = kvm_read_vm_id_reg(kvm, SYS_ID_AA64PFR1_EL1);
 	val &= (NV_FTR(PFR1, BT)	|
 		NV_FTR(PFR1, SSBS)	|
+		NV_FTR(PFR1, SME)	|
 		NV_FTR(PFR1, CSV2_frac));
 	kvm_set_vm_id_reg(kvm, SYS_ID_AA64PFR1_EL1, val);
 

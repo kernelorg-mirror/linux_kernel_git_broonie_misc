@@ -470,7 +470,7 @@ static inline void sme_alloc(struct task_struct *task, bool flush) { }
 static inline void sme_setup(void) { }
 static inline unsigned int sme_get_vl(void) { return 0; }
 static inline int sme_max_vl(void) { return 0; }
-static inline int sme_max_virtualisable_vl(void) { return 0; }
+static inline int sme_max_virtualisable_vl(void) { return SME_VQ_INVALID; }
 static inline int sme_set_current_vl(unsigned long arg) { return -EINVAL; }
 static inline int sme_get_current_vl(void) { return -EINVAL; }
 static inline void sme_suspend_exit(void) { }

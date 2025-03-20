@@ -94,8 +94,15 @@ static int regmap_spi_read(void *context,
 {
 	struct device *dev = context;
 	struct spi_device *spi = to_spi_device(dev);
+	struct spi_message m;
+	struct spi_transfer t[2] = { { .tx_buf = reg, .len = reg_size, },
+				     { .rx_buf = val, .len = val_size, }, };
 
-	return spi_write_then_read(spi, reg, reg_size, val, val_size);
+	spi_message_init(&m);
+	spi_message_add_tail(&t[0], &m);
+	spi_message_add_tail(&t[1], &m);
+
+	return spi_sync(spi, &m);
 }
 
 static const struct regmap_bus regmap_spi = {

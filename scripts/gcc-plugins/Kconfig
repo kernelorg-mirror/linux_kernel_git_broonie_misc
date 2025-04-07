@@ -7,6 +7,7 @@ config HAVE_GCC_PLUGINS
 
 menuconfig GCC_PLUGINS
 	bool "GCC plugins"
+	depends on !COMPILE_TEST
 	depends on HAVE_GCC_PLUGINS
 	depends on CC_IS_GCC
 	depends on $(success,test -e $(shell,$(CC) -print-file-name=plugin)/include/plugin-version.h)

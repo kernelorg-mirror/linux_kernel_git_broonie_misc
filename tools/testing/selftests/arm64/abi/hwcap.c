@@ -17,6 +17,8 @@
 #include <asm/sigcontext.h>
 #include <asm/unistd.h>
 
+#include <linux/auxvec.h>
+
 #include "../../kselftest.h"
 
 #define TESTS_PER_HWCAP 3
@@ -165,6 +167,18 @@ static void lse128_sigill(void)
 	/* SWPP X1, X2, [X0] */
 	asm volatile(".inst 0x19228001"
 		     : "+r" (memp), "+r" (val0), "+r" (val1)
+		     :
+		     : "cc", "memory");
+}
+
+static void lsfe_sigill(void)
+{
+	float __attribute__ ((aligned (16))) mem = 0;
+	register float *memp asm ("x0") = &mem;
+
+	/* LDFADD H0, H0, [X0] */
+	asm volatile(".inst 0x7c200000"
+		     : "+r" (memp)
 		     :
 		     : "cc", "memory");
 }
@@ -761,6 +775,13 @@ static const struct hwcap_data {
 		.hwcap_bit = HWCAP2_LSE128,
 		.cpuinfo = "lse128",
 		.sigill_fn = lse128_sigill,
+	},
+	{
+		.name = "LSFE",
+		.at_hwcap = AT_HWCAP3,
+		.hwcap_bit = HWCAP3_LSFE,
+		.cpuinfo = "lsfe",
+		.sigill_fn = lsfe_sigill,
 	},
 	{
 		.name = "LUT",

@@ -1459,9 +1459,10 @@ u64 limit_nv_id_reg(struct kvm *kvm, u32 reg, u64 val)
 
 	case SYS_ID_AA64PFR1_EL1:
 		/* Only support BTI, SSBS, CSV2_frac */
-		val &= (ID_AA64PFR1_EL1_BT	|
-			ID_AA64PFR1_EL1_SSBS	|
-			ID_AA64PFR1_EL1_CSV2_frac);
+		val &= (ID_AA64PFR1_EL1_BT		|
+			ID_AA64PFR1_EL1_SSBS		|
+			ID_AA64PFR1_EL1_CSV2_frac	|
+			ID_AA64PFR1_EL1_GCS);
 		break;
 
 	case SYS_ID_AA64MMFR0_EL1:

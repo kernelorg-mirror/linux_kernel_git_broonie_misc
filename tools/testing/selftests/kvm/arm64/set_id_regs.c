@@ -417,12 +417,14 @@ u64 get_invalid_value(const struct reg_ftr_bits *ftr_bits, u64 ftr)
 	return ftr;
 }
 
-static u64 test_reg_set_success(struct kvm_vcpu *vcpu, u64 reg,
-				const struct reg_ftr_bits *ftr_bits)
+static void test_reg_set_success(struct kvm_vcpu *vcpu, u64 reg,
+				 const struct reg_ftr_bits *ftr_bits)
 {
 	u8 shift = ftr_bits->shift;
 	u64 mask = ftr_bits->mask;
 	u64 val, new_val, ftr;
+	bool pass;
+	int ret;
 
 	val = vcpu_get_reg(vcpu, reg);
 	ftr = (val & mask) >> shift;
@@ -433,11 +435,17 @@ static u64 test_reg_set_success(struct kvm_vcpu *vcpu, u64 reg,
 	val &= ~mask;
 	val |= ftr;
 
-	vcpu_set_reg(vcpu, reg, val);
-	new_val = vcpu_get_reg(vcpu, reg);
-	TEST_ASSERT_EQ(new_val, val);
-
-	return new_val;
+	ret = __vcpu_set_reg(vcpu, reg, val);
+	if (ret == 0) {
+		new_val = vcpu_get_reg(vcpu, reg);
+		pass = new_val == val;
+		if (!pass)
+			ksft_print_msg("%lx != %lx\n", new_val, val);
+	} else {
+		ksft_print_msg("Write of 0x%lx failed: %d\n", val, ret);
+		pass = false;
+	}
+	ksft_test_result(pass, "%s valid write succeeded\n", ftr_bits->name);
 }
 
 static void test_reg_set_fail(struct kvm_vcpu *vcpu, u64 reg,
@@ -447,6 +455,7 @@ static void test_reg_set_fail(struct kvm_vcpu *vcpu, u64 reg,
 	u64 mask = ftr_bits->mask;
 	u64 val, old_val, ftr;
 	int r;
+	bool match;
 
 	val = vcpu_get_reg(vcpu, reg);
 	ftr = (val & mask) >> shift;
@@ -459,11 +468,19 @@ static void test_reg_set_fail(struct kvm_vcpu *vcpu, u64 reg,
 	val |= ftr;
 
 	r = __vcpu_set_reg(vcpu, reg, val);
-	TEST_ASSERT(r < 0 && errno == EINVAL,
-		    "Unexpected KVM_SET_ONE_REG error: r=%d, errno=%d", r, errno);
+	if (r >= 0 || errno != EINVAL) {
+		ksft_print_msg("Unexpected KVM_SET_ONE_REG error: r=%d, errno=%d (%s)\n",
+			       r, errno, strerror(errno));
+		ksft_test_result_fail("%s invalid write rejected\n",
+				      ftr_bits->name);
+		return;
+	}
 
 	val = vcpu_get_reg(vcpu, reg);
-	TEST_ASSERT_EQ(val, old_val);
+	match = val == old_val;
+	if (!match)
+		ksft_print_msg("%lx != %lx\n", val, old_val);
+	ksft_test_result(match, "%s invalid write rejected\n", ftr_bits->name);
 }
 
 static u64 test_reg_vals[KVM_ARM_FEATURE_ID_RANGE_SIZE];
@@ -503,7 +520,11 @@ static void test_vm_ftr_id_regs(struct kvm_vcpu *vcpu, bool aarch64_only)
 		for (int j = 0;  ftr_bits[j].type != FTR_END; j++) {
 			/* Skip aarch32 reg on aarch64 only system, since they are RAZ/WI. */
 			if (aarch64_only && sys_reg_CRm(reg_id) < 4) {
-				ksft_test_result_skip("%s on AARCH64 only system\n",
+				ksft_print_msg("%s on AARCH64 only system\n",
+					       ftr_bits[j].name);
+				ksft_test_result_skip("%s invalid write rejected\n",
+						      ftr_bits[j].name);
+				ksft_test_result_skip("%s valid write succeeded\n",
 						      ftr_bits[j].name);
 				continue;
 			}
@@ -512,11 +533,8 @@ static void test_vm_ftr_id_regs(struct kvm_vcpu *vcpu, bool aarch64_only)
 			TEST_ASSERT_EQ(masks[idx] & ftr_bits[j].mask, ftr_bits[j].mask);
 
 			test_reg_set_fail(vcpu, reg, &ftr_bits[j]);
-
-			test_reg_vals[idx] = test_reg_set_success(vcpu, reg,
-								  &ftr_bits[j]);
-
-			ksft_test_result_pass("%s\n", ftr_bits[j].name);
+			test_reg_set_success(vcpu, reg, &ftr_bits[j]);
+			test_reg_vals[idx] = vcpu_get_reg(vcpu, reg);
 		}
 	}
 }
@@ -996,7 +1014,7 @@ int main(void)
 		ID_REG_RESET_UNCHANGED_TEST;
 	for (i = 0; i < ARRAY_SIZE(test_regs); i++)
 		for (j = 0; test_regs[i].ftr_bits[j].type != FTR_END; j++)
-			test_cnt++;
+			test_cnt += 2;
 
 	ksft_set_plan(test_cnt);
 

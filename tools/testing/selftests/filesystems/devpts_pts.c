@@ -100,7 +100,7 @@ static int resolve_procfd_symlink(int fd, char *buf, size_t buflen)
 static int do_tiocgptpeer(char *ptmx, char *expected_procfd_contents)
 {
 	int ret;
-	int master = -1, slave = -1, fret = -1;
+	int master = -1, slave, fret = -1;
 
 	master = open(ptmx, O_RDWR | O_NOCTTY | O_CLOEXEC);
 	if (master < 0) {
@@ -119,9 +119,7 @@ static int do_tiocgptpeer(char *ptmx, char *expected_procfd_contents)
 		goto do_cleanup;
 	}
 
-#ifdef TIOCGPTPEER
 	slave = ioctl(master, TIOCGPTPEER, O_RDWR | O_NOCTTY | O_CLOEXEC);
-#endif
 	if (slave < 0) {
 		if (errno == EINVAL) {
 			fprintf(stderr, "TIOCGPTPEER is not supported. "

@@ -503,7 +503,7 @@ static void test_vm_ftr_id_regs(struct kvm_vcpu *vcpu, bool aarch64_only)
 
 		for (int j = 0;  ftr_bits[j].type != FTR_END; j++) {
 			/* Skip aarch32 reg on aarch64 only system, since they are RAZ/WI. */
-			if (aarch64_only && sys_reg_CRm(reg_id) < 4) {
+			if (aarch64_only && is_aarch32_id_reg(reg_id)) {
 				ksft_print_msg("%s on AARCH64 only system\n",
 					       ftr_bits[j].name);
 				ksft_test_result_skip("%s invalid write rejected\n",

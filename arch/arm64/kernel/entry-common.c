@@ -234,8 +234,18 @@ static inline void fpsimd_syscall_enter(void)
 	if (test_thread_flag(TIF_SVE)) {
 		unsigned int sve_vq_minus_one;
 
-		sve_vq_minus_one = sve_vq_from_vl(task_get_sve_vl(current)) - 1;
-		sve_flush_live(true, sve_vq_minus_one);
+		/*
+		 * Ensure that tasks that don't block in a syscall
+		 * also get a chance to drop TIF_SVE.
+		 */
+		if (unlikely(time_after(jiffies,
+					current->thread.sve_timeout))) {
+			clear_thread_flag(TIF_SVE);
+			sve_user_disable();
+		} else {
+			sve_vq_minus_one = sve_vq_from_vl(task_get_sve_vl(current)) - 1;
+			sve_flush_live(true, sve_vq_minus_one);
+		}
 	}
 
 	/*

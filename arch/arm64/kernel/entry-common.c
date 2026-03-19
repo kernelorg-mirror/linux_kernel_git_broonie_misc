@@ -274,8 +274,19 @@ static inline void fpsimd_syscall_enter(void)
 	if (!system_supports_sve())
 		return;
 
-	if (test_thread_flag(TIF_SVE))
-		sve_flush_live();
+	if (test_thread_flag(TIF_SVE)) {
+		/*
+		 * Ensure that tasks that don't block in a syscall
+		 * also get a chance to drop TIF_SVE.
+		 */
+		if (unlikely(time_after(jiffies,
+					current->thread.sve_timeout))) {
+			clear_thread_flag(TIF_SVE);
+			sve_user_disable();
+		} else {
+			sve_flush_live();
+		}
+	}
 
 	/*
 	 * Any live non-FPSIMD SVE state has been zeroed. Allow

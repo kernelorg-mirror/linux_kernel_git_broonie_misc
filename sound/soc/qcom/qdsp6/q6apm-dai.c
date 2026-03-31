@@ -582,6 +582,9 @@ static int q6apm_dai_compr_pointer(struct snd_soc_component *component,
 	guard(spinlock_irqsave)(&prtd->lock);
 	tstamp->copied_total = prtd->copied_total;
 	temp_copied_total = tstamp->copied_total;
+
+	if (!prtd->pcm_size)
+		return -EINVAL;
 	tstamp->byte_offset = do_div(temp_copied_total, prtd->pcm_size);
 
 	return 0;

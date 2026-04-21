@@ -503,6 +503,9 @@ int snd_soc_limit_volume(struct snd_soc_card *card, const char *name, int max)
 			mc->platform_max = max;
 			ret = snd_soc_clip_to_platform_max(kctl);
 		}
+	} else {
+		dev_warn(card->dev, "Volume limit for unknown control '%s'\n",
+			 name);
 	}
 
 	return ret;

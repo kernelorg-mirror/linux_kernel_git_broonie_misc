@@ -204,6 +204,10 @@ static inline void sme_free(struct task_struct *t) { }
 
 #endif
 
+#ifdef CONFIG_ARM64_ERRATUM_4193714
+static cpumask_t sme_dvmsync_cpus;
+#endif
+
 static void fpsimd_bind_task_to_cpu(void);
 
 /*
@@ -403,6 +407,13 @@ static void task_fpsimd_load(void)
 	/* Restore SME, override SVE register configuration if needed */
 	if (system_supports_sme()) {
 		unsigned long sme_vl = task_get_sme_vl(current);
+
+#ifdef CONFIG_ARM64_ERRATUM_4193714
+		if (alternative_has_cap_unlikely(ARM64_WORKAROUND_4193714) &&
+		    cpumask_test_cpu(smp_processor_id(), &sme_dvmsync_cpus) &&
+		    current->thread.svcr == 0)
+			clear_thread_flag(TIF_SME);
+#endif
 
 		/* Ensure VL is set up for restoring data */
 		if (test_thread_flag(TIF_SME)) {
@@ -1354,7 +1365,6 @@ void do_sve_acc(unsigned long esr, struct pt_regs *regs)
 /*
  * SME/CME erratum handling.
  */
-static cpumask_t sme_dvmsync_cpus;
 cpumask_t sme_active_cpus;
 
 /*

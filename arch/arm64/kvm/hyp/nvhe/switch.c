@@ -301,6 +301,12 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 */
 	dsb(nsh);
 
+	/*
+	 * Ensure any GCS memory effects are visible to this CPU.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
+
 	__kvm_adjust_pc(vcpu);
 
 	/*
@@ -344,6 +350,13 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	 * ongoing EL1&0 translations.
 	 */
 	dsb(nsh);
+
+	/*
+	 * Ensure any GCS memory effects from the outgoing vCPU are
+	 * visible elsewhere.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
 
 	__deactivate_traps(vcpu);
 	__load_host_stage2();

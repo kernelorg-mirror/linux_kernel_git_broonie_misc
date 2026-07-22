@@ -240,6 +240,13 @@ void __vcpu_load_switch_sysregs(struct kvm_vcpu *vcpu)
 		dsb(nsh);
 
 	/*
+	 * Ensure any GCS memory effects are visible to the incoming
+	 * vCPU.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
+
+	/*
 	 * Load guest EL1 and user state
 	 *
 	 * We must restore the 32-bit state before the sysregs, thanks
@@ -298,6 +305,13 @@ void __vcpu_put_switch_sysregs(struct kvm_vcpu *vcpu)
 
 	/* Restore host user state */
 	__sysreg_restore_user_state(host_ctxt);
+
+	/*
+	 * Ensure any GCS memory effects from the outgoing vCPU are
+	 * visible elsewhere.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
 
 	vcpu_clear_flag(vcpu, SYSREGS_ON_CPU);
 }

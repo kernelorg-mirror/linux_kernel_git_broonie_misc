@@ -291,6 +291,12 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__debug_save_host_buffers_nvhe(vcpu);
 
 	/*
+	 * Ensure any GCS memory effects are visible to this CPU.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
+
+	/*
 	 * We're about to restore some new MMU state. Make sure
 	 * ongoing page-table walks that have started before we
 	 * trapped to EL2 have completed. This also synchronises the
@@ -337,6 +343,13 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 	__sysreg32_save_state(vcpu);
 	__timer_disable_traps(vcpu);
 	__hyp_vgic_save_state(vcpu);
+
+	/*
+	 * Ensure any GCS memory effects from the outgoing vCPU are
+	 * visible elsewhere.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
 
 	/*
 	 * Same thing as before the guest run: we're about to switch

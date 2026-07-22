@@ -229,6 +229,13 @@ void __vcpu_load_switch_sysregs(struct kvm_vcpu *vcpu)
 	__sysreg_save_user_state(host_ctxt);
 
 	/*
+	 * Ensure any GCS memory effects are visible to the incoming
+	 * vCPU.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
+
+	/*
 	 * When running a normal EL1 guest, we only load a new vcpu
 	 * after a context switch, which involves a DSB, so all
 	 * speculative EL1&0 walks will have already completed.
@@ -295,6 +302,13 @@ void __vcpu_put_switch_sysregs(struct kvm_vcpu *vcpu)
 
 	__sysreg_save_user_state(guest_ctxt);
 	__sysreg32_save_state(vcpu);
+
+	/*
+	 * Ensure any GCS memory effects from the outgoing vCPU are
+	 * visible elsewhere.
+	 */
+	if (ctxt_has_gcs(guest_ctxt))
+		gcsb_dsync();
 
 	/* Restore host user state */
 	__sysreg_restore_user_state(host_ctxt);

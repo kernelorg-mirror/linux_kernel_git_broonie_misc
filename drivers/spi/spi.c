@@ -3542,6 +3542,13 @@ int spi_register_controller(struct spi_controller *ctlr)
 			goto del_ctrl;
 	}
 
+	/*
+	 * Ensure that there's always *some* limit without us needing
+	 * special cases everywhere.
+	 */
+	if (!ctlr->max_speed_hz)
+		ctlr->max_speed_hz = U32_MAX;
+
 	mutex_lock(&board_lock);
 	list_add_tail(&ctlr->list, &spi_controller_list);
 	list_for_each_entry(bi, &board_list, list)

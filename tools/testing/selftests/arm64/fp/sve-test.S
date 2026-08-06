@@ -317,34 +317,6 @@ function irritator_handler
 	ret
 endfunction
 
-function tickle_handler
-	// Increment the signal count (x23):
-	ldr	x0, [x2, #ucontext_regs + 8 * 23]
-	add	x0, x0, #1
-	str	x0, [x2, #ucontext_regs + 8 * 23]
-
-	ret
-endfunction
-
-function terminate_handler
-	mov	w21, w0
-	mov	x20, x2
-
-	puts	"Terminated by signal "
-	mov	w0, w21
-	bl	putdec
-	puts	", no error, iterations="
-	ldr	x0, [x20, #ucontext_regs + 8 * 22]
-	bl	putdec
-	puts	", signals="
-	ldr	x0, [x20, #ucontext_regs + 8 * 23]
-	bl	putdecn
-
-	mov	x0, #0
-	mov	x8, #__NR_exit
-	svc	#0
-endfunction
-
 // w0: signal number
 // x1: sa_action
 // w2: sa_flags

@@ -10,7 +10,6 @@
 // (leave it running for as long as you want...)
 // kill $pids
 
-#include <asm/unistd.h>
 #include "assembler.h"
 #include "asm-offsets.h"
 
@@ -184,10 +183,6 @@ function main
 	add	x21, x21, #1
 	cmp	x21, #NVR
 	b.lo	0b
-
-// Can't do this when SVE state is volatile across SVC:
-	mov	x8, #__NR_sched_yield	// Encourage preemption
-	svc	#0
 
 	mov	x21, #0
 0:	mov	x0, x21

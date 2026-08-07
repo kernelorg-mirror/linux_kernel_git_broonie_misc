@@ -10,7 +10,6 @@
 // (leave it running for as long as you want...)
 // kill $pids
 
-#include <asm/unistd.h>
 #include "assembler.h"
 #include "asm-offsets.h"
 #include "sme-inst.h"
@@ -202,10 +201,6 @@ function main
 	bl	setup_za
 	subs	x21, x21, #1
 	b.ne	0b
-
-	mov	x8, #__NR_sched_yield	// encourage preemption
-1:
-	svc	#0
 
 	mrs	x0, S3_3_C4_C2_2	// SVCR should have ZA=1,SM=0
 	and	x1, x0, #3

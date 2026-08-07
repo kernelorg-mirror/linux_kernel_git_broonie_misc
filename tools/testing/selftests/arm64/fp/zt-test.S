@@ -284,7 +284,5 @@ function svcr_barf
 	mov	x0, x10
 	bl	putdecn
 
-	mov	x8, #__NR_exit
-	mov	x1, #1
-	svc	#0
+	b	exit_error
 endfunction

@@ -6,7 +6,6 @@
 // Repeatedly writes unique test patterns into ZT0
 // and reads them back to verify integrity.
 
-#include <asm/unistd.h>
 #include "assembler.h"
 #include "asm-offsets.h"
 #include "sme-inst.h"
@@ -142,9 +141,6 @@ function main
 	mov	x0, x20
 	mov	x1, x22
 	bl	setup_zt
-
-	mov	x8, #__NR_sched_yield	// Encourage preemption
-	svc	#0
 
 	mrs	x0, S3_3_C4_C2_2	// SVCR should have ZA=1,SM=0
 	and	x1, x0, #3

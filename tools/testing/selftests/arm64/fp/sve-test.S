@@ -10,7 +10,6 @@
 // (leave it running for as long as you want...)
 // kill $pids
 
-#include <asm/unistd.h>
 #include "assembler.h"
 #include "asm-offsets.h"
 #include "sme-inst.h"
@@ -377,10 +376,6 @@ function main
 	add	x21, x21, #1
 	cmp	x21, #NZR + NPR
 	b.lo	0b
-
-// Can't do this when SVE state is volatile across SVC:
-//	mov	x8, #__NR_sched_yield	// Encourage preemption
-//	svc	#0
 
 #ifdef SSVE
 	mrs	x0, S3_3_C4_C2_2	// SVCR should have ZA=0,SM=1

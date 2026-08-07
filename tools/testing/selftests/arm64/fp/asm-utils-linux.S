@@ -84,3 +84,11 @@ function tickle_handler
 	ret
 endfunction
 .globl	tickle_handler
+
+// Terminate the program, reporting failure.  Does not return.
+function exit_error
+	mov	x0, #1
+	mov	x8, #__NR_exit
+	svc	#0
+endfunction
+.globl	exit_error

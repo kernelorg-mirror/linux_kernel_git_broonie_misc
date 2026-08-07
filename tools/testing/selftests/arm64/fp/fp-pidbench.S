@@ -28,9 +28,9 @@
 	puts	"\n"
 .endm
 
-// Main program entry point
-.globl _start
-function _start
+// Program specific main function
+.globl main
+function main
 	puts	"Iterations per test: "
 	mov	x20, #10000
 	lsl	x20, x20, #12

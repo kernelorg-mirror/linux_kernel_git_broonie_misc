@@ -92,3 +92,90 @@ function exit_error
 	svc	#0
 endfunction
 .globl	exit_error
+
+// Install a signal handler
+//
+// w0: signal number
+// x1: sa_action
+// w2: sa_flags
+// Clobbers x0-x6,x8
+function setsignal
+	str	x30, [sp, #-((sa_sz + 15) / 16 * 16 + 16)]!
+
+	mov	w4, w0
+	mov	x5, x1
+	mov	w6, w2
+
+	add	x0, sp, #16
+	mov	x1, #sa_sz
+	bl	memclr
+
+	mov	w0, w4
+	add	x1, sp, #16
+	str	w6, [x1, #sa_flags]
+	str	x5, [x1, #sa_handler]
+	mov	x2, #0
+	mov	x3, #sa_mask_sz
+	mov	x8, #__NR_rt_sigaction
+	svc	#0
+
+	cbz	w0, 1f
+
+	puts	"sigaction failure\n"
+	b	exit_error
+
+1:	ldr	x30, [sp], #((sa_sz + 15) / 16 * 16 + 16)
+	ret
+endfunction
+.globl	setsignal
+
+// Programs which want to be interrupted by SIGUSR1 provide an
+// irritator_handler(), for those that don't the signal is left alone.
+.weak	irritator_handler
+
+// Main program entry point.  Install the signal handlers shared by the
+// programs, zeroing the signal count in x23 that the handlers maintain,
+// read and report the PID the programs use for uniqueness in x20, then
+// run the program specific main().
+.globl _start
+function _start
+	enable_gcs
+
+	mov	x23, #0		// signal count
+
+	mov	w0, #SIGINT
+	adr	x1, terminate_handler
+	mov	w2, #SA_SIGINFO
+	bl	setsignal
+
+	mov	w0, #SIGTERM
+	adr	x1, terminate_handler
+	mov	w2, #SA_SIGINFO
+	bl	setsignal
+
+	// Load as a literal, adr can't reference the symbol when the
+	// program provides no handler and it resolves to 0
+	ldr	x1, =irritator_handler
+	cbz	x1, 1f
+	mov	w0, #SIGUSR1
+	mov	w2, #SA_SIGINFO
+	orr	w2, w2, #SA_NODEFER
+	bl	setsignal
+
+1:	mov	w0, #SIGUSR2
+	adr	x1, tickle_handler
+	mov	w2, #SA_SIGINFO
+	orr	w2, w2, #SA_NODEFER
+	bl	setsignal
+
+	// Obtain our PID, to ensure test pattern uniqueness between processes
+	mov	x8, #__NR_getpid
+	svc	#0
+	mov	x20, x0
+
+	puts	"PID:\t"
+	mov	x0, x20
+	bl	putdecn
+
+	b	main
+endfunction

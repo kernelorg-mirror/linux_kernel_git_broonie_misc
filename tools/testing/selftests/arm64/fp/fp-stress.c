@@ -7,6 +7,7 @@
 #define _POSIX_C_SOURCE 199309L
 
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <poll.h>
 #include <signal.h>
@@ -18,11 +19,13 @@
 #include <unistd.h>
 #include <sys/auxv.h>
 #include <sys/epoll.h>
+#include <sys/ioctl.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
 #include <asm/hwcap.h>
+#include <linux/kvm.h>
 
 #include "kselftest.h"
 
@@ -46,6 +49,11 @@ static struct epoll_event *evs;
 static int tests;
 static int num_children;
 static bool terminate;
+static int sve_vl_count, sme_vl_count;
+static int sve_vls[MAX_VLS], sme_vls[MAX_VLS];
+static bool have_kvm;
+static bool have_kvm_el2;
+static bool have_kvm_sve;
 
 static int startup_pipe[2];
 
@@ -58,6 +66,14 @@ static int num_processors(void)
 	}
 
 	return nproc;
+}
+
+static char *kvm_el_arg(int cpu)
+{
+	if (have_kvm_el2 && ((cpu % 4) == 3))
+		return "--el2";
+	else
+		return "--el1";
 }
 
 static void child_start(struct child_data *child, char *const prog_args[])
@@ -322,6 +338,21 @@ static void start_fpsimd(struct child_data *child, int cpu, int copy)
 	ksft_print_msg("Started %s\n", child->name);
 }
 
+static void start_fpsimd_kvm(struct child_data *child, int cpu, int copy)
+{
+	char *args[] = { "./fp-stress-vmm", kvm_el_arg(cpu),
+			 "./fpsimd-test-kvm.bin", NULL };
+	int ret;
+
+	ret = asprintf(&child->name, "FPSIMD-KVM-%d-%d", cpu, copy);
+	if (ret == -1)
+		ksft_exit_fail_msg("asprintf() failed\n");
+
+	child_start(child, args);
+
+	ksft_print_msg("Started %s\n", child->name);
+}
+
 static void start_kernel(struct child_data *child, int cpu, int copy)
 {
 	char *args[] = { "./kernel-test", NULL };
@@ -346,6 +377,26 @@ static void start_sve(struct child_data *child, int vl, int cpu)
 		ksft_exit_fail_msg("Failed to set SVE VL %d\n", vl);
 
 	ret = asprintf(&child->name, "SVE-VL-%d-%d", vl, cpu);
+	if (ret == -1)
+		ksft_exit_fail_msg("asprintf() failed\n");
+
+	child_start(child, args);
+
+	ksft_print_msg("Started %s\n", child->name);
+}
+
+static void start_sve_kvm(struct child_data *child, int vl, int cpu)
+{
+	char *args[] = { "./fp-stress-vmm", "--sve", NULL, kvm_el_arg(cpu),
+			 "./sve-test-kvm.bin", NULL };
+	char vl_str[32];
+	int ret;
+
+	/* Our VLs are in bytes, fp-stress-vmm wants bits */
+	snprintf(vl_str, sizeof(vl_str), "%d", vl * 8);
+	args[2] = vl_str;
+
+	ret = asprintf(&child->name, "SVE-KVM-VL-%d-%d", vl, cpu);
 	if (ret == -1)
 		ksft_exit_fail_msg("asprintf() failed\n");
 
@@ -404,6 +455,136 @@ static void start_zt(struct child_data *child, int cpu)
 	ksft_print_msg("Started %s\n", child->name);
 }
 
+static void kvm_put_vcpu(int vm_fd, int vcpu_fd)
+{
+	if (vcpu_fd >= 0)
+		close(vcpu_fd);
+	if (vm_fd >= 0)
+		close(vm_fd);
+}
+
+static bool kvm_get_vcpu(int kvm_fd, int feature, int *vm_fd, int *vcpu_fd)
+{
+	struct kvm_vcpu_init init;
+	int ret;
+
+	*vcpu_fd = -1;
+
+	*vm_fd = ioctl(kvm_fd, KVM_CREATE_VM, 0);
+	if (*vm_fd < 0) {
+		ksft_print_msg("KVM_CREATE_VM failed: %s (%d)\n",
+			       strerror(errno), errno);
+		return false;
+	}
+
+	*vcpu_fd = ioctl(*vm_fd, KVM_CREATE_VCPU, 0);
+	if (*vcpu_fd < 0) {
+		ksft_print_msg("KVM_CREATE_VCPU failed: %s (%d)\n",
+			       strerror(errno), errno);
+		goto err;
+	}
+
+	ret = ioctl(*vm_fd, KVM_ARM_PREFERRED_TARGET, &init);
+	if (ret) {
+		ksft_print_msg("KVM_ARM_PREFERRED_TARGET failed: %s (%d)\n",
+			       strerror(errno), errno);
+		goto err;
+	}
+
+	init.features[0] |= 1 << feature;
+	ret = ioctl(*vcpu_fd, KVM_ARM_VCPU_INIT, &init);
+	if (ret) {
+		ksft_print_msg("KVM_ARM_VCPU_INIT feature %d failed: %s (%d)\n",
+			       feature, strerror(errno), errno);
+		goto err;
+	}
+
+	return true;
+
+err:
+	kvm_put_vcpu(*vm_fd, *vcpu_fd);
+	return false;
+}
+
+static void probe_kvm_sve(int kvm_fd)
+{
+	__u64 vqs[KVM_ARM64_SVE_VLS_WORDS];
+	struct kvm_one_reg reg = {
+		.id = KVM_REG_ARM64_SVE_VLS,
+		.addr = (__u64)vqs,
+	};
+	int vm_fd, vcpu_fd, i;
+	unsigned int vq;
+
+	if (!sve_vl_count)
+		return;
+
+	if (!ioctl(kvm_fd, KVM_CHECK_EXTENSION, KVM_CAP_ARM_SVE)) {
+		ksft_print_msg("No KVM SVE support\n");
+		return;
+	}
+
+	if (!kvm_get_vcpu(kvm_fd, KVM_ARM_VCPU_SVE, &vm_fd, &vcpu_fd))
+		return;
+
+	/*
+	 * The vector length set is readable without finalizing the vCPU,
+	 * we only want to look at it rather than run anything.
+	 */
+	if (ioctl(vcpu_fd, KVM_GET_ONE_REG, &reg)) {
+		ksft_print_msg("Failed to read KVM SVE VLs: %s (%d)\n",
+			       strerror(errno), errno);
+		goto out;
+	}
+
+	have_kvm_sve = true;
+	for (i = 0; i < sve_vl_count; i++) {
+		vq = sve_vq_from_vl(sve_vls[i]);
+
+		if (!(vqs[(vq - KVM_ARM64_SVE_VQ_MIN) / 64] &
+		      (1ULL << ((vq - KVM_ARM64_SVE_VQ_MIN) % 64)))) {
+			ksft_print_msg("KVM has no SVE VL %d\n", sve_vls[i]);
+			have_kvm_sve = false;
+		}
+	}
+
+out:
+	kvm_put_vcpu(vm_fd, vcpu_fd);
+}
+
+/*
+ * We don't act as a VMM for guests directly, this just enumerates what
+ * can be run with KVM.
+ */
+static void probe_kvm(void)
+{
+	int fd, ret;
+
+	fd = open("/dev/kvm", O_RDWR | O_CLOEXEC);
+	if (fd < 0) {
+		ksft_print_msg("Not using KVM, /dev/kvm: %s (%d)\n",
+			       strerror(errno), errno);
+		return;
+	}
+
+	ret = ioctl(fd, KVM_GET_API_VERSION, 0);
+	if (ret != KVM_API_VERSION) {
+		ksft_print_msg("Not using KVM, API version %d not %d\n",
+			       ret, KVM_API_VERSION);
+		close(fd);
+		return;
+	}
+
+	have_kvm = true;
+
+	if (ioctl(fd, KVM_CHECK_EXTENSION, KVM_CAP_ARM_EL2))
+		have_kvm_el2 = true;
+
+	probe_kvm_sve(fd);
+
+	close(fd);
+}
+
 static void probe_vls(int vls[], int *vl_count, int set_vl)
 {
 	unsigned int vq;
@@ -460,10 +641,8 @@ int main(int argc, char **argv)
 	int timeout = 10 * (1000 / SIGNAL_INTERVAL_MS);
 	int poll_interval = 5000;
 	int cpus, i, j, c;
-	int sve_vl_count, sme_vl_count;
 	bool all_children_started = false;
 	int seen_children;
-	int sve_vls[MAX_VLS], sme_vls[MAX_VLS];
 	bool have_sme2;
 	struct sigaction sa;
 
@@ -509,9 +688,15 @@ int main(int argc, char **argv)
 	ksft_print_header();
 	ksft_set_plan(tests);
 
+	probe_kvm();
+
 	ksft_print_msg("%d CPUs, %d SVE VLs, %d SME VLs, SME2 %s\n",
 		       cpus, sve_vl_count, sme_vl_count,
 		       have_sme2 ? "present" : "absent");
+	ksft_print_msg("KVM: %s, %s EL2, %s SVE\n",
+		       have_kvm ? "present" : "absent",
+		       have_kvm_el2 ? "with" : "without",
+		       have_kvm_sve ? "with" : "without");
 
 	if (timeout > 0)
 		ksft_print_msg("Will run for %d\n", timeout);
@@ -559,11 +744,20 @@ int main(int argc, char **argv)
 				   tests);
 
 	for (i = 0; i < cpus; i++) {
-		start_fpsimd(&children[num_children++], i, 0);
+		if (have_kvm && (i % 2))
+			start_fpsimd_kvm(&children[num_children++], i, 0);
+		else
+			start_fpsimd(&children[num_children++], i, 0);
 		start_kernel(&children[num_children++], i, 0);
 
-		for (j = 0; j < sve_vl_count; j++)
-			start_sve(&children[num_children++], sve_vls[j], i);
+		for (j = 0; j < sve_vl_count; j++) {
+			if (have_kvm_sve && (i % 2))
+				start_sve_kvm(&children[num_children++],
+					      sve_vls[j], i);
+			else
+				start_sve(&children[num_children++],
+					  sve_vls[j], i);
+		}
 
 		for (j = 0; j < sme_vl_count; j++) {
 			start_ssve(&children[num_children++], sme_vls[j], i);

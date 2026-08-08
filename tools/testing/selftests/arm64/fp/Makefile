@@ -11,7 +11,7 @@ TEST_GEN_PROGS := \
 	sve-ptrace sve-probe-vls \
 	vec-syscfg \
 	za-fork za-ptrace
-TEST_GEN_PROGS_EXTENDED := fp-pidbench fpsimd-test \
+TEST_GEN_PROGS_EXTENDED := fp-pidbench fp-stress-vmm fpsimd-test \
 	kernel-test \
 	rdvl-sme rdvl-sve \
 	sve-test \
@@ -26,6 +26,13 @@ EXTRA_CLEAN += $(OUTPUT)/asm-utils.o $(OUTPUT)/asm-utils-linux.o \
 	$(OUTPUT)/rdvl.o $(OUTPUT)/za-fork-asm.o
 
 ASM_UTILS_LINUX := $(OUTPUT)/asm-utils.o $(OUTPUT)/asm-utils-linux.o
+
+# For sysreg definitons
+ARCH_INCLUDES := $(KHDR_INCLUDES) -I$(top_srcdir)/tools/arch/arm64/include \
+	-I$(top_srcdir)/tools/include \
+	-I$(top_srcdir)/tools/include/generated
+
+$(OUTPUT)/fp-stress-vmm: CFLAGS += $(ARCH_INCLUDES)
 
 # Build with nolibc to avoid effects due to libc's clone() support
 $(OUTPUT)/fp-pidbench: fp-pidbench.S $(ASM_UTILS_LINUX)

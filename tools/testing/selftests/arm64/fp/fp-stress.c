@@ -60,7 +60,7 @@ static int num_processors(void)
 	return nproc;
 }
 
-static void child_start(struct child_data *child, const char *program)
+static void child_start(struct child_data *child, char *const prog_args[])
 {
 	int ret, pipefd[2], i;
 	struct epoll_event ev;
@@ -116,9 +116,9 @@ static void child_start(struct child_data *child, const char *program)
 			printf("%d bytes of data on startup pipe\n", ret);
 		close(3);
 
-		ret = execl(program, program, NULL);
-		printf("execl(%s) failed: %d (%s)\n",
-		       program, errno, strerror(errno));
+		ret = execv(prog_args[0], prog_args);
+		printf("execv(%s) failed: %d (%s)\n",
+		       prog_args[0], errno, strerror(errno));
 
 		exit(EXIT_FAILURE);
 	} else {
@@ -310,32 +310,35 @@ static void handle_exit_signal(int sig, siginfo_t *info, void *context)
 
 static void start_fpsimd(struct child_data *child, int cpu, int copy)
 {
+	char *args[] = { "./fpsimd-test", NULL };
 	int ret;
 
 	ret = asprintf(&child->name, "FPSIMD-%d-%d", cpu, copy);
 	if (ret == -1)
 		ksft_exit_fail_msg("asprintf() failed\n");
 
-	child_start(child, "./fpsimd-test");
+	child_start(child, args);
 
 	ksft_print_msg("Started %s\n", child->name);
 }
 
 static void start_kernel(struct child_data *child, int cpu, int copy)
 {
+	char *args[] = { "./kernel-test", NULL };
 	int ret;
 
 	ret = asprintf(&child->name, "KERNEL-%d-%d", cpu, copy);
 	if (ret == -1)
 		ksft_exit_fail_msg("asprintf() failed\n");
 
-	child_start(child, "./kernel-test");
+	child_start(child, args);
 
 	ksft_print_msg("Started %s\n", child->name);
 }
 
 static void start_sve(struct child_data *child, int vl, int cpu)
 {
+	char *args[] = { "./sve-test", NULL };
 	int ret;
 
 	ret = prctl(PR_SVE_SET_VL, vl | PR_SVE_VL_INHERIT);
@@ -346,13 +349,14 @@ static void start_sve(struct child_data *child, int vl, int cpu)
 	if (ret == -1)
 		ksft_exit_fail_msg("asprintf() failed\n");
 
-	child_start(child, "./sve-test");
+	child_start(child, args);
 
 	ksft_print_msg("Started %s\n", child->name);
 }
 
 static void start_ssve(struct child_data *child, int vl, int cpu)
 {
+	char *args[] = { "./ssve-test", NULL };
 	int ret;
 
 	ret = asprintf(&child->name, "SSVE-VL-%d-%d", vl, cpu);
@@ -363,13 +367,14 @@ static void start_ssve(struct child_data *child, int vl, int cpu)
 	if (ret < 0)
 		ksft_exit_fail_msg("Failed to set SME VL %d\n", ret);
 
-	child_start(child, "./ssve-test");
+	child_start(child, args);
 
 	ksft_print_msg("Started %s\n", child->name);
 }
 
 static void start_za(struct child_data *child, int vl, int cpu)
 {
+	char *args[] = { "./za-test", NULL };
 	int ret;
 
 	ret = prctl(PR_SME_SET_VL, vl | PR_SVE_VL_INHERIT);
@@ -380,20 +385,21 @@ static void start_za(struct child_data *child, int vl, int cpu)
 	if (ret == -1)
 		ksft_exit_fail_msg("asprintf() failed\n");
 
-	child_start(child, "./za-test");
+	child_start(child, args);
 
 	ksft_print_msg("Started %s\n", child->name);
 }
 
 static void start_zt(struct child_data *child, int cpu)
 {
+	char *args[] = { "./zt-test", NULL };
 	int ret;
 
 	ret = asprintf(&child->name, "ZT-%d", cpu);
 	if (ret == -1)
 		ksft_exit_fail_msg("asprintf() failed\n");
 
-	child_start(child, "./zt-test");
+	child_start(child, args);
 
 	ksft_print_msg("Started %s\n", child->name);
 }

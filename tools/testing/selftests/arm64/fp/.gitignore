@@ -1,6 +1,7 @@
 fp-pidbench
 fp-ptrace
 fp-stress
+fp-stress-kvm.lds
 fp-stress-vmm
 fpsimd-test
 kernel-test
@@ -17,3 +18,5 @@ za-ptrace
 za-test
 zt-ptrace
 zt-test
+*-kvm.bin
+*-kvm.elf

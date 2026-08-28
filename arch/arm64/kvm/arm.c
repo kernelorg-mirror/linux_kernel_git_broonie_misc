@@ -2187,6 +2187,14 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 	params->tcr_el2 = tcr;
 
 	tcr2 = 0;
+	if (cpus_have_final_cap(ARM64_HAS_S1PIE)) {
+		if (cpus_have_final_cap(ARM64_KVM_HVHE))
+			params->pir_el2 = KVM_HVHE_PIR_EL2;
+		else
+			params->pir_el2 = KVM_NVHE_PIR_EL2;
+
+		tcr2 |= TCR2_EL2_PIE;
+	}
 	params->tcr2_el2 = tcr2;
 
 	params->pgd_pa = kvm_mmu_get_httbr();

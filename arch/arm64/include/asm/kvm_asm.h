@@ -207,6 +207,7 @@ extern void *__vhe_undefined_symbol;
 
 struct kvm_nvhe_init_params {
 	unsigned long mair_el2;
+	unsigned long pir_el2;
 	unsigned long tcr_el2;
 	unsigned long tcr2_el2;
 	unsigned long tpidr_el2;

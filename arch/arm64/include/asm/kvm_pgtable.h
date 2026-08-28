@@ -93,6 +93,7 @@ typedef u64 kvm_pte_t;
 
 #define KVM_PTE_LEAF_ATTR_HI_S2_XN	GENMASK(54, 53)
 
+#define KVM_PTE_LEAF_ATTR_HI_S1_DBM	BIT(51)
 #define KVM_PTE_LEAF_ATTR_HI_S1_GP	BIT(50)
 
 #define KVM_PTE_LEAF_ATTR_S2_PERMS	(KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R | \
@@ -296,6 +297,31 @@ enum kvm_pgtable_prot {
 #define PAGE_HYP_EXEC		(KVM_PGTABLE_PROT_R | KVM_PGTABLE_PROT_X)
 #define PAGE_HYP_RO		(KVM_PGTABLE_PROT_R)
 #define PAGE_HYP_DEVICE		(PAGE_HYP | KVM_PGTABLE_PROT_DEVICE)
+
+/*
+ * Permission indirection configuration for the nVHE hypervisor when we
+ * have FEAT_S1PIE. Like the host kernel we configure a mapping
+ * equivalent to the non-PIE meanings of the bits so the page table
+ * manipulation code does not need to account for PIE.
+ *
+ * Since nVHE and hVHE fix AP[1] as 1 or 0 respectively we define
+ * separate PIE mappings for each. These mappings are minimal with
+ * only things used from the hypervisor. Write permission is
+ * controlled via DBM.
+ */
+
+#define KVM_HYP_PIR_IDX(uxn, pxn, dbm, ap1) (((uxn) << 3) | ((pxn) << 2) | \
+					     ((dbm) << 1) | (ap1))
+
+#define KVM_NVHE_PIR_EL2        (					\
+       PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(0, 0, 0, 1), PIE_RX)	|	\
+       PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(1, 0, 0, 1), PIE_RW)	|	\
+       PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(1, 0, 1, 1), PIE_R))
+
+#define KVM_HVHE_PIR_EL2        (					\
+       PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(0, 0, 0, 0), PIE_RX)	|	\
+       PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(1, 1, 1, 0), PIE_R)	|	\
+       PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(1, 1, 0, 0), PIE_RW))
 
 typedef bool (*kvm_pgtable_force_pte_cb_t)(u64 addr, u64 end,
 					   enum kvm_pgtable_prot prot);

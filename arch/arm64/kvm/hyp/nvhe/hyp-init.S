@@ -137,8 +137,13 @@ alternative_if ARM64_HAS_CNP
 alternative_else_nop_endif
 	msr	ttbr0_el2, x2
 
-	ldr	x0, [x0, #NVHE_INIT_TCR_EL2]
-	msr	tcr_el2, x0
+	ldr	x1, [x0, #NVHE_INIT_TCR_EL2]
+	msr	tcr_el2, x1
+
+alternative_if ARM64_HAS_TCR2
+	ldr	x1, [x0, #NVHE_INIT_TCR2_EL2]
+	msr	REG_TCR2_EL2, x1
+alternative_else_nop_endif
 
 	isb
 
@@ -250,6 +255,15 @@ reset:
 	mov_q	x5, INIT_SCTLR_EL2_MMU_OFF
 	pre_disable_mmu_workaround
 	msr	sctlr_el2, x5
+
+alternative_if ARM64_HAS_TCR2
+	/*
+	 * Disable any features we enabled in case the next user doesn't
+	 * have TCR2_EL2 support.
+	 */
+	msr	REG_TCR2_EL2, xzr
+alternative_else_nop_endif
+
 	isb
 
 	/* Install stub vectors */

@@ -2158,7 +2158,7 @@ static int kvm_init_vector_slots(void)
 static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 {
 	struct kvm_nvhe_init_params *params = per_cpu_ptr_nvhe_sym(kvm_init_params, cpu);
-	unsigned long tcr;
+	unsigned long tcr, tcr2;
 
 	/*
 	 * Calculate the raw per-cpu offset without a translation from the
@@ -2185,6 +2185,12 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 	}
 	tcr |= TCR_T0SZ(hyp_va_bits);
 	params->tcr_el2 = tcr;
+
+	tcr2 = 0;
+	if (cpus_have_final_cap(ARM64_HAS_S1PIE) &&
+	    cpus_have_final_cap(ARM64_KVM_HVHE))
+		tcr2 |= TCR2_EL2_PIE;
+	params->tcr2_el2 = tcr2;
 
 	params->pgd_pa = kvm_mmu_get_httbr();
 	if (is_protected_kvm_enabled())

@@ -349,6 +349,14 @@ static int hyp_set_prot_attr(enum kvm_pgtable_prot prot, kvm_pte_t *ptep)
 
 		if (system_supports_bti_kernel())
 			attr |= KVM_PTE_LEAF_ATTR_HI_S1_GP;
+	} else if (cpus_have_final_cap(ARM64_HAS_S1PIE) &&
+		   cpus_have_final_cap(ARM64_KVM_HVHE) &&
+		   (prot & KVM_PGTABLE_PROT_W)) {
+		/*
+		 * When using S1PIE for hVHE set DBM for writable
+		 * mappings since AP[2] is ineffective.
+		 */
+		attr |= KVM_PTE_LEAF_ATTR_HI_S1_DBM;
 	}
 
 	if (cpus_have_final_cap(ARM64_KVM_HVHE)) {

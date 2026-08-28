@@ -137,8 +137,20 @@ alternative_if ARM64_HAS_CNP
 alternative_else_nop_endif
 	msr	ttbr0_el2, x2
 
-	ldr	x0, [x0, #NVHE_INIT_TCR_EL2]
-	msr	tcr_el2, x0
+	ldr	x1, [x0, #NVHE_INIT_TCR_EL2]
+	msr	tcr_el2, x1
+
+alternative_if ARM64_HAS_S1PIE
+	/* S1PIE is only enabled with TCR2_EL2.PIE if we are running hVHE */
+	mov_q	x1, KVM_HVHE_PIR_EL2
+	msr	REG_PIR_EL2, x1
+	msr	REG_PIRE0_EL2, xzr
+alternative_else_nop_endif
+
+alternative_if ARM64_HAS_TCR2
+	ldr	x1, [x0, #NVHE_INIT_TCR2_EL2]
+	msr	REG_TCR2_EL2, x1
+alternative_else_nop_endif
 
 	isb
 

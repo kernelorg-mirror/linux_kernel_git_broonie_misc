@@ -345,4 +345,23 @@
 #define VCPU_RESET_PSTATE_SVC	(PSR_AA32_MODE_SVC | PSR_AA32_A_BIT | \
 				 PSR_AA32_I_BIT | PSR_AA32_F_BIT)
 
+/*
+ * Permission indirection configuration for the hVHE hypervisor when
+ * we have FEAT_S1PIE. Like the host kernel we configure a mapping
+ * mostly equivalent to the non-PIE meanings of the bits so the
+ * page table manipulation code needs minimal updates for PIE.
+ *
+ * These mappings are minimal with only things used from the
+ * hVHE hypervisor, nVHE is not supported.  Write permission is
+ * controlled via DBM.
+ */
+
+#define KVM_HYP_PIR_IDX(uxn, pxn, dbm, ap1) (((uxn) << 3) | ((pxn) << 2) | \
+					     ((dbm) << 1) | (ap1))
+
+#define KVM_HVHE_PIR_EL2 (						\
+	PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(0, 0, 0, 0), PIE_RX)	|	\
+	PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(1, 1, 0, 0), PIE_R)	|	\
+	PIRx_ELx_PERM_PREP(KVM_HYP_PIR_IDX(1, 1, 1, 0), PIE_RW))
+
 #endif /* __ARM64_KVM_ARM_H__ */

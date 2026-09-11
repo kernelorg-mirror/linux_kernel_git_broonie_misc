@@ -120,29 +120,43 @@ SYSCALL_DEFINE3(map_shadow_stack, unsigned long, addr, unsigned long, size, unsi
 	return addr;
 }
 
-/*
- * Apply the GCS mode configured for the specified task to the
- * hardware.
- */
-void gcs_set_el0_mode(struct task_struct *task)
+void gcs_set_el0_mode(struct task_struct *task, u64 flags)
 {
 	u64 gcscre0_el1 = GCSCRE0_EL1_nTR;
 
-	if (task->thread.gcs_el0_mode & PR_SHADOW_STACK_ENABLE)
+	if (flags & PR_SHADOW_STACK_ENABLE)
 		gcscre0_el1 |= GCSCRE0_EL1_RVCHKEN | GCSCRE0_EL1_PCRSEL;
 
-	if (task->thread.gcs_el0_mode & PR_SHADOW_STACK_WRITE)
+	if (flags & PR_SHADOW_STACK_WRITE)
 		gcscre0_el1 |= GCSCRE0_EL1_STREn;
 
-	if (task->thread.gcs_el0_mode & PR_SHADOW_STACK_PUSH)
+	if (flags & PR_SHADOW_STACK_PUSH)
 		gcscre0_el1 |= GCSCRE0_EL1_PUSHMEn;
 
-	write_sysreg_s(gcscre0_el1, SYS_GCSCRE0_EL1);
+	WRITE_ONCE(task->thread.gcscre0_el1, gcscre0_el1);
+	if (task == current)
+		write_sysreg_s(gcscre0_el1, SYS_GCSCRE0_EL1);
+}
+
+u64 gcs_get_el0_mode(const struct task_struct *task)
+{
+	u64 flags = 0;
+
+	if (task->thread.gcscre0_el1 & GCSCRE0_EL1_PCRSEL)
+		flags |= PR_SHADOW_STACK_ENABLE;
+
+	if (task->thread.gcscre0_el1 & GCSCRE0_EL1_STREn)
+		flags |= PR_SHADOW_STACK_WRITE;
+
+	if (task->thread.gcscre0_el1 & GCSCRE0_EL1_PUSHMEn)
+		flags |= PR_SHADOW_STACK_PUSH;
+
+	return flags;
 }
 
 int gcs_check_locked(struct task_struct *task, unsigned long new_val)
 {
-	unsigned long cur_val = task->thread.gcs_el0_mode;
+	unsigned long cur_val = gcs_get_el0_mode(task);
 
 	cur_val &= task->thread.gcs_el0_locked;
 	new_val &= task->thread.gcs_el0_locked;
@@ -211,9 +225,7 @@ int arch_set_shadow_stack_status(struct task_struct *task, unsigned long arg)
 				       SYS_GCSPR_EL0);
 	}
 
-	task->thread.gcs_el0_mode = arg;
-	if (task == current)
-		gcs_set_el0_mode(task);
+	gcs_set_el0_mode(task, arg);
 
 	return 0;
 }
@@ -221,13 +233,16 @@ int arch_set_shadow_stack_status(struct task_struct *task, unsigned long arg)
 int arch_get_shadow_stack_status(struct task_struct *task,
 				 unsigned long __user *arg)
 {
+	u64 mode;
+
 	if (!system_supports_gcs())
 		return -EINVAL;
 
 	if (is_compat_thread(task_thread_info(task)))
 		return -EINVAL;
 
-	return put_user(task->thread.gcs_el0_mode, arg);
+	mode = gcs_get_el0_mode(task);
+	return put_user(mode, arg);
 }
 
 int arch_lock_shadow_stack_status(struct task_struct *task,

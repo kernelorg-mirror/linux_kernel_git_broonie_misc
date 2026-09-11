@@ -293,9 +293,10 @@ static void flush_gcs(void)
 	current->thread.gcspr_el0 = 0;
 	current->thread.gcs_base = 0;
 	current->thread.gcs_size = 0;
-	current->thread.gcs_el0_mode = 0;
 	current->thread.gcs_el0_locked = 0;
-	write_sysreg_s(GCSCRE0_EL1_nTR, SYS_GCSCRE0_EL1);
+	current->thread.gcscre0_el1 = GCSCRE0_EL1_nTR;
+
+	write_sysreg_s(current->thread.gcscre0_el1, SYS_GCSCRE0_EL1);
 	write_sysreg_s(0, SYS_GCSPR_EL0);
 }
 
@@ -310,7 +311,7 @@ static int copy_thread_gcs(struct task_struct *p,
 	p->thread.gcs_base = 0;
 	p->thread.gcs_size = 0;
 
-	p->thread.gcs_el0_mode = current->thread.gcs_el0_mode;
+	p->thread.gcscre0_el1 = current->thread.gcscre0_el1;
 	p->thread.gcs_el0_locked = current->thread.gcs_el0_locked;
 
 	gcs = gcs_alloc_thread_stack(p, args);
@@ -593,9 +594,7 @@ static void gcs_thread_switch(struct task_struct *next)
 	/* GCSPR_EL0 is always readable */
 	gcs_preserve_current_state();
 	write_sysreg_s(next->thread.gcspr_el0, SYS_GCSPR_EL0);
-
-	if (current->thread.gcs_el0_mode != next->thread.gcs_el0_mode)
-		gcs_set_el0_mode(next);
+	write_sysreg_s(next->thread.gcscre0_el1, SYS_GCSCRE0_EL1);
 
 	/*
 	 * Ensure that GCS memory effects of the 'prev' thread are

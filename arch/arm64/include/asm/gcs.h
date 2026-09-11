@@ -56,12 +56,13 @@ static inline u64 gcsss2(void)
 
 #ifdef CONFIG_ARM64_GCS
 
-static inline bool task_gcs_el0_enabled(struct task_struct *task)
+static inline bool task_gcs_el0_enabled(const struct task_struct *task)
 {
-	return task->thread.gcs_el0_mode & PR_SHADOW_STACK_ENABLE;
+	return task->thread.gcscre0_el1 & GCSCRE0_EL1_PCRSEL;
 }
 
-void gcs_set_el0_mode(struct task_struct *task);
+void gcs_set_el0_mode(struct task_struct *task, u64 flags);
+u64 gcs_get_el0_mode(const struct task_struct *task);
 int gcs_check_locked(struct task_struct *task, unsigned long new_val);
 void gcs_free(struct task_struct *task);
 void gcs_preserve_current_state(void);

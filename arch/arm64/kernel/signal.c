@@ -712,6 +712,7 @@ static int preserve_gcs_context(struct gcs_context __user *ctx)
 {
 	int err = 0;
 	u64 gcspr = read_sysreg_s(SYS_GCSPR_EL0);
+	u64 mode = gcs_get_el0_mode(current);
 
 	/*
 	 * If GCS is enabled we will add a cap token to the frame,
@@ -727,8 +728,7 @@ static int preserve_gcs_context(struct gcs_context __user *ctx)
 	__put_user_error(sizeof(*ctx), &ctx->head.size, err);
 	__put_user_error(gcspr, &ctx->gcspr, err);
 	__put_user_error(0, &ctx->reserved, err);
-	__put_user_error(current->thread.gcs_el0_mode,
-			 &ctx->features_enabled, err);
+	__put_user_error(mode, &ctx->features_enabled, err);
 
 	return err;
 }
@@ -763,7 +763,7 @@ static int restore_gcs_context(struct user_ctxs *user)
 	if (!(enabled & PR_SHADOW_STACK_ENABLE))
 		enabled = 0;
 
-	current->thread.gcs_el0_mode = enabled;
+	gcs_set_el0_mode(current, enabled);
 
 	/*
 	 * We let userspace set GCSPR_EL0 to anything here, we will
@@ -1080,7 +1080,7 @@ static int gcs_restore_signal(void)
 	if (!system_supports_gcs())
 		return 0;
 
-	if (!(current->thread.gcs_el0_mode & PR_SHADOW_STACK_ENABLE))
+	if (!task_gcs_el0_enabled(current))
 		return 0;
 
 	gcspr_el0 = read_sysreg_s(SYS_GCSPR_EL0);

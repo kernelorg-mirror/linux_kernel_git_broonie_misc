@@ -1568,7 +1568,7 @@ static int poe_set(struct task_struct *target, const struct
 static void task_gcs_to_user(struct user_gcs *user_gcs,
 			     const struct task_struct *target)
 {
-	user_gcs->features_enabled = target->thread.gcs_el0_mode;
+	user_gcs->features_enabled = gcs_get_el0_mode(target);
 	user_gcs->features_locked = target->thread.gcs_el0_locked;
 	user_gcs->gcspr_el0 = target->thread.gcspr_el0;
 }
@@ -1576,7 +1576,7 @@ static void task_gcs_to_user(struct user_gcs *user_gcs,
 static void task_gcs_from_user(struct task_struct *target,
 			       const struct user_gcs *user_gcs)
 {
-	target->thread.gcs_el0_mode = user_gcs->features_enabled;
+	gcs_set_el0_mode(target, user_gcs->features_enabled);
 	target->thread.gcs_el0_locked = user_gcs->features_locked;
 	target->thread.gcspr_el0 = user_gcs->gcspr_el0;
 }

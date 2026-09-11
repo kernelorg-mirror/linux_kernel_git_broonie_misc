@@ -62,24 +62,11 @@ static inline bool task_gcs_el0_enabled(struct task_struct *task)
 }
 
 void gcs_set_el0_mode(struct task_struct *task);
+int gcs_check_locked(struct task_struct *task, unsigned long new_val);
 void gcs_free(struct task_struct *task);
 void gcs_preserve_current_state(void);
 unsigned long gcs_alloc_thread_stack(struct task_struct *tsk,
 				     const struct kernel_clone_args *args);
-
-static inline int gcs_check_locked(struct task_struct *task,
-				   unsigned long new_val)
-{
-	unsigned long cur_val = task->thread.gcs_el0_mode;
-
-	cur_val &= task->thread.gcs_el0_locked;
-	new_val &= task->thread.gcs_el0_locked;
-
-	if (cur_val != new_val)
-		return -EPERM;
-
-	return 0;
-}
 
 static inline int gcssttr(unsigned long __user *addr, unsigned long val)
 {

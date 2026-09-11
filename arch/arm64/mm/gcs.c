@@ -140,6 +140,19 @@ void gcs_set_el0_mode(struct task_struct *task)
 	write_sysreg_s(gcscre0_el1, SYS_GCSCRE0_EL1);
 }
 
+int gcs_check_locked(struct task_struct *task, unsigned long new_val)
+{
+	unsigned long cur_val = task->thread.gcs_el0_mode;
+
+	cur_val &= task->thread.gcs_el0_locked;
+	new_val &= task->thread.gcs_el0_locked;
+
+	if (cur_val != new_val)
+		return -EPERM;
+
+	return 0;
+}
+
 void gcs_free(struct task_struct *task)
 {
 	if (!system_supports_gcs())

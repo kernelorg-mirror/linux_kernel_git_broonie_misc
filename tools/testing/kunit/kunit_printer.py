@@ -8,9 +8,15 @@
 
 import datetime
 import sys
+import threading
 import typing
 
 _RESET = '\033[0;0m'
+
+# Python's text streams aren't thread safe: concurrent writes to
+# sys.stdout from several threads can lose output or write garbage. All
+# output from the tool should go through this lock.
+print_lock = threading.Lock()
 
 class Printer:
 	"""Wraps a file object, providing utilities for coloring output, etc."""
@@ -25,7 +31,8 @@ class Printer:
 
 	def print(self, message: str) -> None:
 		if self._print:
-			print(message, file=self._output)
+			with print_lock:
+				print(message, file=self._output)
 
 	def print_with_timestamp(self, message: str) -> None:
 		ts = datetime.datetime.now().strftime('%H:%M:%S')

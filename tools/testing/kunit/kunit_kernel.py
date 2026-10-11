@@ -21,6 +21,7 @@ from typing import Iterator, List, Optional, Tuple, Any
 from types import FrameType
 
 import kunit_config
+import kunit_printer
 import qemu_config
 
 KCONFIG_PATH = '.config'
@@ -132,7 +133,7 @@ class LinuxSourceTreeOperationsQemu(LinuxSourceTreeOperations):
 				'-accel', 'tcg',
 				'-serial', self._serial] + self._extra_qemu_params
 		# Note: shlex.join() does what we want, but requires python 3.8+.
-		print('Running tests with:\n$', ' '.join(shlex.quote(arg) for arg in qemu_command))
+		kunit_printer.stdout.print('Running tests with:\n$ ' + ' '.join(shlex.quote(arg) for arg in qemu_command))
 		return subprocess.Popen(qemu_command,
 					stdin=subprocess.PIPE,
 					stdout=subprocess.PIPE,
@@ -154,7 +155,7 @@ class LinuxSourceTreeOperationsUml(LinuxSourceTreeOperations):
 		"""Runs the Linux UML binary. Must be named 'linux'."""
 		linux_bin = os.path.join(build_dir, 'linux')
 		params.extend(['mem=1G', 'console=tty', 'kunit_shutdown=halt'])
-		print('Running tests with:\n$', linux_bin, ' '.join(shlex.quote(arg) for arg in params))
+		kunit_printer.stdout.print('Running tests with:\n$ ' + linux_bin + ' ' + ' '.join(shlex.quote(arg) for arg in params))
 		return subprocess.Popen([linux_bin] + params,
 					   stdin=subprocess.PIPE,
 					   stdout=subprocess.PIPE,
@@ -402,7 +403,7 @@ class LinuxSourceTree:
 			try:
 				process.wait(timeout=timeout)
 			except Exception as e:
-				print(e)
+				kunit_printer.stdout.print(str(e))
 				process.terminate()
 				process.wait()
 		waiter = threading.Thread(target=_wait_proc)

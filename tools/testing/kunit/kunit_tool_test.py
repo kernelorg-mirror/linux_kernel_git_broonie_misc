@@ -522,6 +522,23 @@ class LinuxSourceTreeTest(unittest.TestCase):
 			with open(kunit_kernel.get_outfile_path(build_dir), 'rt') as outfile:
 				self.assertEqual(outfile.read(), 'hi\nbye\n', msg='Missing some output')
 
+	def test_run_kernel_outfile(self):
+		"""Verify run_kernel() logs to the given outfile instead of test.log."""
+		def fake_start(unused_args, unused_build_dir):
+			return subprocess.Popen(['printf', 'hi\n'], text=True, stdout=subprocess.PIPE)
+
+		with tempfile.TemporaryDirectory('') as build_dir:
+			tree = kunit_kernel.LinuxSourceTree(build_dir, kunitconfig_paths=[os.devnull])
+			mock.patch.object(tree._ops, 'start', side_effect=fake_start).start()
+
+			# Awkward characters in the name are sanitised.
+			outfile = kunit_kernel.get_outfile_path(build_dir, 'my suite.test*')
+			self.assertEqual(outfile, os.path.join(build_dir, 'test.my_suite.test_.log'))
+			self.assertEqual(list(tree.run_kernel(build_dir=build_dir, outfile=outfile)), ['hi\n'])
+			with open(outfile, 'rt') as f:
+				self.assertEqual(f.read(), 'hi\n')
+			self.assertFalse(os.path.exists(kunit_kernel.get_outfile_path(build_dir)))
+
 	def test_run_kernel_args_not_mutated(self):
 		"""Verify run_kernel() copies args so callers can reuse them."""
 		start_calls = []

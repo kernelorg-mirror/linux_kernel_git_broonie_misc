@@ -109,8 +109,15 @@ def config_and_build_tests(linux: kunit_kernel.LinuxSourceTree,
 
 	return build_tests(linux, request)
 
+# kunit.action=list prints every suite and test name in one burst at boot,
+# which can be thousands of lines on a large config. That easily overflows
+# the default 128KiB printk buffer before the console has drained it, so
+# lines (sometimes including the KTAP header) are dropped and the list
+# comes out incomplete. Give the kernel a large enough buffer to hold it.
+_LIST_KERNEL_ARGS = ['log_buf_len=4M']
+
 def _list_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -> List[str]:
-	args = ['kunit.action=list']
+	args = ['kunit.action=list'] + _LIST_KERNEL_ARGS
 
 	if request.kernel_args:
 		args.extend(request.kernel_args)
@@ -129,7 +136,7 @@ def _list_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) 
 	return [l for l in lines if re.match(r'^[^\s.]+\.[^\s.]+$', l)]
 
 def _list_tests_attr(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -> Iterable[str]:
-	args = ['kunit.action=list_attr']
+	args = ['kunit.action=list_attr'] + _LIST_KERNEL_ARGS
 
 	if request.kernel_args:
 		args.extend(request.kernel_args)

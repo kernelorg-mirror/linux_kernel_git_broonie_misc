@@ -8,6 +8,7 @@
 # Author: Brendan Higgins <brendanhiggins@google.com>
 
 import argparse
+import concurrent.futures
 import os
 import re
 import shlex
@@ -18,7 +19,7 @@ assert sys.version_info >= (3, 7), "Python version is too old"
 
 from dataclasses import dataclass, replace
 from enum import Enum, auto
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import kunit_json
 import kunit_junit
@@ -66,6 +67,7 @@ class KunitExecRequest(KunitParseRequest):
 	list_tests: bool
 	list_tests_attr: bool
 	list_suites: bool
+	parallel: int
 
 @dataclass
 class KunitRequest(KunitExecRequest, KunitBuildRequest):
@@ -166,6 +168,52 @@ def _suites_from_test_list(tests: List[str]) -> List[str]:
 			suites.append(suite)
 	return suites
 
+def _run_kernels(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest,
+		 filter_globs: List[str]) -> Iterator[Iterable[str]]:
+	"""Boots a kernel for each filter glob and yields each kernel's output.
+
+	Outputs are always yielded in the order of filter_globs, so the
+	results are reported in the same order whether the kernels are run
+	one after another or (with --parallel) several at a time.
+	"""
+	num_kernels = len(filter_globs)
+	workers = min(request.parallel, num_kernels)
+	if workers <= 1:
+		for i, filter_glob in enumerate(filter_globs):
+			stdout.print_with_timestamp('Starting KUnit Kernel ({}/{})...'.format(i+1, num_kernels))
+			yield linux.run_kernel(
+				args=request.kernel_args,
+				timeout=request.timeout,
+				filter_glob=filter_glob,
+				filter=request.filter,
+				filter_action=request.filter_action,
+				build_dir=request.build_dir)
+		return
+
+	# Each kernel's output is buffered by a worker thread and only
+	# handed back once all the kernels before it in filter_globs have
+	# been reported, so which kernel finishes first doesn't matter.
+	# The kernels write to separate log files named after the suite or
+	# test they ran, e.g. test.<suite>.log.
+	def run(filter_glob: str) -> List[str]:
+		return list(linux.run_kernel(
+			args=request.kernel_args,
+			timeout=request.timeout,
+			filter_glob=filter_glob,
+			filter=request.filter,
+			filter_action=request.filter_action,
+			build_dir=request.build_dir,
+			outfile=kunit_kernel.get_outfile_path(request.build_dir, filter_glob)))
+
+	stdout.print_with_timestamp('Starting {} KUnit Kernels, {} at a time...'.format(num_kernels, workers))
+	with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+		futures = [pool.submit(run, filter_glob) for filter_glob in filter_globs]
+		for i, (filter_glob, future) in enumerate(zip(filter_globs, futures)):
+			output = future.result()
+			stdout.print_with_timestamp('Results from KUnit Kernel ({}/{}) for {}, console log in {}:'.format(
+				i+1, num_kernels, filter_glob, kunit_kernel.get_outfile_path(request.build_dir, filter_glob)))
+			yield output
+
 def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -> KunitResult:
 	filter_globs = [request.filter_glob]
 	if request.list_tests:
@@ -184,11 +232,14 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 		for line in output:
 			print(line.rstrip())
 		return KunitResult(status=KunitStatus.SUCCESS, elapsed_time=0.0)
-	if request.run_isolated:
+	if request.run_isolated or request.parallel > 1:
 		tests = _list_tests(linux, request)
 		if request.run_isolated == 'test':
 			filter_globs = tests
-		elif request.run_isolated == 'suite':
+		else:
+			# One kernel per suite: either --run_isolated=suite, or
+			# --parallel, which splits the tests up by suite so that
+			# each suite can be run in a separate kernel.
 			filter_globs = _suites_from_test_list(tests)
 			# Apply the test-part of the user's glob, if present.
 			if '.' in request.filter_glob:
@@ -203,26 +254,9 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 	report.counts = test_counts
 	parse_request = replace(request, json=None, junit=None)
 	test_failed = False
-	exec_time = 0.0
-	for i, filter_glob in enumerate(filter_globs):
-		stdout.print_with_timestamp('Starting KUnit Kernel ({}/{})...'.format(i+1, len(filter_globs)))
-
-		test_start = time.time()
-		run_result = linux.run_kernel(
-			args=request.kernel_args,
-			timeout=request.timeout,
-			filter_glob=filter_glob,
-			filter=request.filter,
-			filter_action=request.filter_action,
-			build_dir=request.build_dir)
-
+	exec_start = time.time()
+	for run_result in _run_kernels(linux, request, filter_globs):
 		_, test_result = parse_tests(parse_request, metadata, run_result)
-		# run_kernel() doesn't block on the kernel exiting.
-		# That only happens after we get the last line of output from `run_result`.
-		# So exec_time here actually contains parsing + execution time, which is fine.
-		test_end = time.time()
-		exec_time += test_end - test_start
-
 		test_counts.add_subtest_counts(test_result.counts)
 		# A kernel with no results has no failed test counts to aggregate.
 		if _map_to_overall_status(test_result.status) != KunitStatus.SUCCESS:
@@ -240,6 +274,10 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 			report.status = kunit_parser.TestStatus.FAILURE_TO_PARSE_TESTS
 	if not request.raw_output:
 		_write_test_results(request, metadata, report)
+	# run_kernel() doesn't block on the kernel exiting.
+	# That only happens after we get the last line of output from `run_result`.
+	# So exec_time here actually contains parsing + execution time, which is fine.
+	exec_time = time.time() - exec_start
 
 	if len(filter_globs) == 1 and test_counts.crashed > 0:
 		bd = request.build_dir
@@ -492,6 +530,13 @@ def add_exec_opts(parser: argparse.ArgumentParser) -> None:
 	parser.add_argument('--list_suites', help='If set, list all suites that will be '
 			    'run.',
 			    action='store_true')
+	parser.add_argument('--parallel',
+			    help='Number of kernels to run at the same time. The tests '
+			    'are split up by suite (or by test with --run_isolated=test) '
+			    'and each suite is run in its own kernel, with the results '
+			    'reported in the same order as a sequential run. Defaults '
+			    'to 1, i.e. a single kernel running all the tests.',
+			    type=int, default=1, metavar='N')
 
 def add_parse_opts(parser: argparse.ArgumentParser) -> None:
 	parser.add_argument('--raw_output', help='If set don\'t parse output from kernel. '
@@ -562,7 +607,8 @@ def run_handler(cli_args: argparse.Namespace) -> None:
 					run_isolated=cli_args.run_isolated,
 					list_tests=cli_args.list_tests,
 					list_tests_attr=cli_args.list_tests_attr,
-					list_suites=cli_args.list_suites)
+					list_suites=cli_args.list_suites,
+					parallel=cli_args.parallel)
 	result = run_tests(linux, request)
 	if result.status != KunitStatus.SUCCESS:
 		sys.exit(1)
@@ -613,7 +659,8 @@ def exec_handler(cli_args: argparse.Namespace) -> None:
 					run_isolated=cli_args.run_isolated,
 					list_tests=cli_args.list_tests,
 					list_tests_attr=cli_args.list_tests_attr,
-					list_suites=cli_args.list_suites)
+					list_suites=cli_args.list_suites,
+					parallel=cli_args.parallel)
 	result = exec_tests(linux, exec_request)
 	stdout.print_with_timestamp((
 		'Elapsed time: %.3fs\n') % (result.elapsed_time))

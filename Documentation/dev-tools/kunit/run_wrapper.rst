@@ -315,6 +315,17 @@ command line arguments:
   This is useful for debugging a non-hermetic test, one that
   might pass/fail based on what ran before it.
 
+- ``--parallel``: Specifies the number of kernels to run at the same time.
+  The tests are split up by suite (or by test, with ``--run_isolated=test``)
+  and each is run in its own kernel, up to ``N`` at a time. The results are
+  reported in the same order as a sequential run, so the output is stable
+  regardless of which kernel finishes first. Each kernel's console output is
+  saved to its own log in the build directory, named after the suite or test
+  it ran, e.g. ``test.kunit_executor_test.log``. Note that each
+  kernel needs its own memory (1GiB for QEMU), so this is best combined with
+  ``--filter`` or a filter glob to avoid running more kernels than the host
+  can comfortably accommodate.
+
 - ``--raw_output``: If set, generates unformatted output from kernel. Possible options are:
 
    - ``all``: To view the full kernel output, use ``--raw_output=all``.

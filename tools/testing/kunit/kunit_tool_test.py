@@ -18,6 +18,7 @@ import os
 import signal
 import subprocess
 import sys
+import textwrap
 from typing import Iterable
 import xml.etree.ElementTree as ET
 
@@ -538,6 +539,8 @@ class LinuxSourceTreeTest(unittest.TestCase):
 			with open(outfile, 'rt') as f:
 				self.assertEqual(f.read(), 'hi\n')
 			self.assertFalse(os.path.exists(kunit_kernel.get_outfile_path(build_dir)))
+			# The kernel has exited so should no longer be tracked.
+			self.assertEqual(tree._processes, [])
 
 	def test_run_kernel_args_not_mutated(self):
 		"""Verify run_kernel() copies args so callers can reuse them."""
@@ -606,6 +609,30 @@ class LinuxSourceTreeTest(unittest.TestCase):
 			tree.signal_handler(signal.SIGINT, None)
 			mock_error.assert_called_once()
 			mock_call.assert_called_once_with(['stty', 'sane'])
+
+	def test_signal_handler_during_process_update(self):
+		# Run in a subprocess so a deadlock fails with a timeout rather
+		# than hanging the test runner. Deliver a real signal while the
+		# main thread holds the lock used to update the process list.
+		code = textwrap.dedent('''\
+			import os
+			import signal
+			from unittest import mock
+			import kunit_kernel
+
+			tree = kunit_kernel.LinuxSourceTree('', kunitconfig_paths=[os.devnull])
+			process = mock.Mock()
+			with tree._processes_lock:
+				tree._processes.append(process)
+				os.kill(os.getpid(), signal.SIGINT)
+			process.terminate.assert_called_once_with()
+			process.wait.assert_called_once_with()
+		''')
+		result = subprocess.run([sys.executable, '-c', code],
+			cwd=os.path.dirname(os.path.abspath(__file__)),
+			stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+			stderr=subprocess.STDOUT, text=True, timeout=5)
+		self.assertEqual(result.returncode, 0, msg=result.stdout)
 
 	def test_build_reconfig_no_config(self):
 		with tempfile.TemporaryDirectory('') as build_dir:

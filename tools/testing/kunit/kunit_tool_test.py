@@ -19,6 +19,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import time
 from typing import Iterable
 import xml.etree.ElementTree as ET
 
@@ -1019,7 +1020,7 @@ class KUnitMainTest(unittest.TestCase):
 		self.linux_source_mock.run_kernel.return_value = ['TAP version 14', 'init: random output'] + want
 
 		got = kunit._list_tests(self.linux_source_mock,
-				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*', '', None, None, 'suite', False, False, False))
+				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*', '', None, None, 'suite', False, False, False, 1))
 		self.assertEqual(got, want)
 		# Should respect the user's filter glob when listing tests.
 		self.linux_source_mock.run_kernel.assert_called_once_with(
@@ -1034,7 +1035,7 @@ class KUnitMainTest(unittest.TestCase):
 			'[    0.300000] suite2.test1']
 
 		got = kunit._list_tests(self.linux_source_mock,
-				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*', '', None, None, 'suite', False, False, False))
+				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*', '', None, None, 'suite', False, False, False, 1))
 		self.assertEqual(got, want)
 
 	@mock.patch.object(kunit, '_list_tests')
@@ -1044,7 +1045,7 @@ class KUnitMainTest(unittest.TestCase):
 
 		# Should respect the user's filter glob when listing tests.
 		mock_tests.assert_called_once_with(mock.ANY,
-				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*.test*', '', None, None, 'suite', False, False, False))
+				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*.test*', '', None, None, 'suite', False, False, False, 1))
 		self.linux_source_mock.run_kernel.assert_has_calls([
 			mock.call(args=None, build_dir='.kunit', filter_glob='suite.test*', filter='', filter_action=None, timeout=300),
 			mock.call(args=None, build_dir='.kunit', filter_glob='suite2.test*', filter='', filter_action=None, timeout=300),
@@ -1057,7 +1058,7 @@ class KUnitMainTest(unittest.TestCase):
 
 		# Should respect the user's filter glob when listing tests.
 		mock_tests.assert_called_once_with(mock.ANY,
-				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*', '', None, None, 'test', False, False, False))
+				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*', '', None, None, 'test', False, False, False, 1))
 		self.linux_source_mock.run_kernel.assert_has_calls([
 			mock.call(args=None, build_dir='.kunit', filter_glob='suite.test1', filter='', filter_action=None, timeout=300),
 			mock.call(args=None, build_dir='.kunit', filter_glob='suite.test2', filter='', filter_action=None, timeout=300),
@@ -1065,35 +1066,115 @@ class KUnitMainTest(unittest.TestCase):
 		])
 
 	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_by_suite(self, mock_tests):
+		mock_tests.return_value = ['suite.test1', 'suite.test2', 'suite2.test1']
+		kunit.main(['exec', '--parallel=2', 'suite*.test*'])
+
+		# Should split by suite, respecting the user's filter glob.
+		mock_tests.assert_called_once_with(mock.ANY,
+				     kunit.KunitExecRequest(None, None, None, False, False, '.kunit', 300, 'suite*.test*', '', None, None, None, False, False, False, 2))
+		# Each kernel gets its own log file, named after its suite.
+		# The kernels run concurrently, so don't depend on the order
+		# they start in.
+		self.assertEqual(self.linux_source_mock.run_kernel.call_count, 2)
+		self.linux_source_mock.run_kernel.assert_has_calls([
+			mock.call(args=None, build_dir='.kunit', filter_glob='suite.test*', filter='', filter_action=None, timeout=300, outfile='.kunit/test.suite.test_.log'),
+			mock.call(args=None, build_dir='.kunit', filter_glob='suite2.test*', filter='', filter_action=None, timeout=300, outfile='.kunit/test.suite2.test_.log'),
+		], any_order=True)
+		self.print_mock.assert_any_call(StrContains('Starting 2 KUnit Kernels, 2 at a time...'))
+		self.print_mock.assert_any_call(StrContains('Results from KUnit Kernel (1/2) for suite.test*, console log in .kunit/test.suite.test_.log:'))
+		self.print_mock.assert_any_call(StrContains('Results from KUnit Kernel (2/2) for suite2.test*, console log in .kunit/test.suite2.test_.log:'))
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_by_test(self, mock_tests):
+		mock_tests.return_value = ['suite.test1', 'suite.test2', 'suite2.test1']
+		kunit.main(['exec', '--parallel=2', '--run_isolated=test', 'suite*'])
+
+		self.assertEqual(self.linux_source_mock.run_kernel.call_count, 3)
+		self.linux_source_mock.run_kernel.assert_has_calls([
+			mock.call(args=None, build_dir='.kunit', filter_glob='suite.test1', filter='', filter_action=None, timeout=300, outfile='.kunit/test.suite.test1.log'),
+			mock.call(args=None, build_dir='.kunit', filter_glob='suite.test2', filter='', filter_action=None, timeout=300, outfile='.kunit/test.suite.test2.log'),
+			mock.call(args=None, build_dir='.kunit', filter_glob='suite2.test1', filter='', filter_action=None, timeout=300, outfile='.kunit/test.suite2.test1.log'),
+		], any_order=True)
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_single_suite_runs_one_kernel(self, mock_tests):
+		# With only one suite there's nothing to parallelise, so this
+		# should behave exactly like a sequential run.
+		mock_tests.return_value = ['suite.test1', 'suite.test2']
+		kunit.main(['exec', '--parallel=4', 'suite'])
+
+		self.linux_source_mock.run_kernel.assert_called_once_with(
+			args=None, build_dir='.kunit', filter_glob='suite', filter='', filter_action=None, timeout=300)
+		self.print_mock.assert_any_call(StrContains('Starting KUnit Kernel (1/1)...'))
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_stable_order(self, mock_tests):
+		mock_tests.return_value = ['suite1.test1', 'suite2.test1', 'suite3.test1']
+
+		# Make the kernels finish in the reverse of the order they're
+		# listed in: results must still come out in the listed order.
+		def fake_run_kernel(filter_glob, **kwargs):
+			delay = {'suite1': 0.2, 'suite2': 0.1, 'suite3': 0.0}[filter_glob]
+			time.sleep(delay)
+			return ['TAP version 14', '1..1', 'ok 1 - ' + filter_glob]
+		self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+
+		kunit.main(['exec', '--parallel=3', '--raw_output=kunit'])
+
+		output = [call.args[0] for call in self.print_mock.call_args_list]
+		want = ['ok 1 - suite1', 'ok 1 - suite2', 'ok 1 - suite3']
+		self.assertEqual([l for l in output if l.startswith('ok')], want)
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_counts_all_kernels(self, mock_tests):
+		mock_tests.return_value = ['suite1.test1', 'suite2.test1']
+
+		def fake_run_kernel(filter_glob, **kwargs):
+			if filter_glob == 'suite2':
+				return ['TAP version 14', '1..1', 'not ok 1 - suite2']
+			return ['TAP version 14', '1..1', 'ok 1 - suite1']
+		self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+
+		# A failure in any of the kernels must fail the overall run.
+		with self.assertRaises(SystemExit) as e:
+			kunit.main(['exec', '--parallel=2'])
+		self.assertEqual(e.exception.code, 1)
+
+	@mock.patch.object(kunit, '_list_tests')
 	def test_isolated_kernel_without_results_fails(self, mock_tests):
 		mock_tests.return_value = ['suite1.test1', 'suite2.test1']
-		for missing_output in ([], ['KTAP version 1', '1..0']):
-			for missing_suite in ('suite1', 'suite2'):
-				with self.subTest(output=missing_output,
-						 suite=missing_suite):
-					def fake_run_kernel(filter_glob, **kwargs):
-						if filter_glob == missing_suite:
-							return missing_output
-						return ['KTAP version 1', '1..1', 'ok 1 - test1']
-					self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+		for parallel in (1, 2):
+			for missing_output in ([], ['KTAP version 1', '1..0']):
+				for missing_suite in ('suite1', 'suite2'):
+					with self.subTest(parallel=parallel, output=missing_output,
+							 suite=missing_suite):
+						def fake_run_kernel(filter_glob, **kwargs):
+							if filter_glob == missing_suite:
+								return missing_output
+							return ['KTAP version 1', '1..1', 'ok 1 - test1']
+						self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
 
-					with self.assertRaises(SystemExit) as e:
-						kunit.main(['exec', '--run_isolated=suite'])
-					self.assertEqual(e.exception.code, 1)
+						with self.assertRaises(SystemExit) as e:
+							kunit.main(['exec', '--run_isolated=suite',
+								    '--parallel=' + str(parallel)])
+						self.assertEqual(e.exception.code, 1)
 
 	@mock.patch.object(kunit, '_list_tests')
 	def test_isolated_skipped_kernels_succeed(self, mock_tests):
 		mock_tests.return_value = ['suite1.test1', 'suite2.test1']
-		for all_skipped in (False, True):
-			with self.subTest(all_skipped=all_skipped):
-				def fake_run_kernel(filter_glob, **kwargs):
-					result = 'ok 1 - test1'
-					if all_skipped or filter_glob == 'suite1':
-						result += ' # SKIP unavailable'
-					return ['KTAP version 1', '1..1', result]
-				self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+		for parallel in (1, 2):
+			for all_skipped in (False, True):
+				with self.subTest(parallel=parallel, all_skipped=all_skipped):
+					def fake_run_kernel(filter_glob, **kwargs):
+						result = 'ok 1 - test1'
+						if all_skipped or filter_glob == 'suite1':
+							result += ' # SKIP unavailable'
+						return ['KTAP version 1', '1..1', result]
+					self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
 
-				kunit.main(['exec', '--run_isolated=suite'])
+					kunit.main(['exec', '--run_isolated=suite',
+						    '--parallel=' + str(parallel)])
 
 	@mock.patch.object(kunit, '_list_tests')
 	def test_isolated_reports_include_all_kernels(self, mock_tests):
@@ -1109,8 +1190,8 @@ class KUnitMainTest(unittest.TestCase):
 				'    1..1', f'    {status} 1 - {case}', f'{status} 1 - {suite}']
 		self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
 
-		for isolation in ('suite', 'test'):
-			with self.subTest(isolation=isolation), \
+		for parallel, isolation in itertools.product((1, 2), ('suite', 'test')):
+			with self.subTest(parallel=parallel, isolation=isolation), \
 			     tempfile.TemporaryDirectory() as output_dir:
 				if isolation == 'suite':
 					mock_tests.return_value = ['suite1.test', 'suite2.test']
@@ -1121,7 +1202,8 @@ class KUnitMainTest(unittest.TestCase):
 				json_path = os.path.join(output_dir, 'results.json')
 				xml_path = os.path.join(output_dir, 'results.xml')
 				with self.assertRaises(SystemExit) as e:
-					kunit.main(['exec', '--run_isolated=' + isolation,
+					kunit.main(['exec', '--parallel=' + str(parallel),
+						    '--run_isolated=' + isolation,
 						    '--json=' + json_path, '--junit=' + xml_path])
 				self.assertEqual(e.exception.code, 1)
 
@@ -1138,6 +1220,31 @@ class KUnitMainTest(unittest.TestCase):
 				self.assertEqual([(suite.get('name'), case.get('name'),
 					'FAIL' if case.find('failure') is not None else 'PASS')
 					for suite in root for case in suite], expected)
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_reports_to_stdout(self, mock_tests):
+		mock_tests.return_value = ['suite1.test', 'suite2.test']
+		self.linux_source_mock.run_kernel.side_effect = lambda filter_glob, **kwargs: [
+			'KTAP version 1', '1..1', 'ok 1 - ' + filter_glob]
+		kunit.main(['exec', '--parallel=2', '--json', '--junit'])
+		output = [call.args[0] for call in self.print_mock.call_args_list]
+		json_reports = [json.loads(line) for line in output if line.startswith('{')]
+		xml_reports = [ET.fromstring(line) for line in output if line.startswith('<testsuite')]
+		self.assertEqual(len(json_reports), 1)
+		self.assertEqual(json_reports[0]['misc']['tests'], 2)
+		self.assertEqual(len(xml_reports), 1)
+		self.assertEqual(xml_reports[0].get('tests'), '2')
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_parallel_raw_output_does_not_write_reports(self, mock_tests):
+		mock_tests.return_value = ['suite1.test', 'suite2.test']
+		with tempfile.TemporaryDirectory() as output_dir:
+			json_path = os.path.join(output_dir, 'results.json')
+			xml_path = os.path.join(output_dir, 'results.xml')
+			kunit.main(['exec', '--parallel=2', '--raw_output=all',
+				    '--json=' + json_path, '--junit=' + xml_path])
+			self.assertFalse(os.path.exists(json_path))
+			self.assertFalse(os.path.exists(xml_path))
 
 	def test_single_kernel_reports_match_parse(self):
 		with tempfile.TemporaryDirectory() as output_dir:

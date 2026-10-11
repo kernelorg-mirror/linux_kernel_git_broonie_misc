@@ -11,6 +11,7 @@ import importlib.util
 import logging
 import subprocess
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -193,8 +194,19 @@ def get_parsed_kunitconfig(build_dir: str,
 		merged.merge_in_entries(partial)
 	return merged
 
-def get_outfile_path(build_dir: str) -> str:
-	return os.path.join(build_dir, OUTFILE_PATH)
+def get_outfile_path(build_dir: str, name: Optional[str]=None) -> str:
+	"""Returns the path of the kernel console log.
+
+	When several kernels are run each needs its own log, so `name` is
+	used to tell them apart, giving test.<name>.log. Characters that are
+	awkward in file names (anything other than letters, digits, '_', '-'
+	and '.') are replaced with '_'.
+	"""
+	if name is None:
+		return os.path.join(build_dir, OUTFILE_PATH)
+	base, ext = os.path.splitext(OUTFILE_PATH)
+	name = re.sub(r'[^\w.-]', '_', name)
+	return os.path.join(build_dir, f'{base}.{name}{ext}')
 
 def _default_qemu_config_path(arch: str) -> str:
 	config_path = os.path.join(QEMU_CONFIGS_DIR, arch + '.py')
@@ -352,7 +364,12 @@ class LinuxSourceTree:
 			return
 		subprocess.call(['stty', 'sane'])
 
-	def run_kernel(self, args: Optional[List[str]]=None, build_dir: str='', filter_glob: str='', filter: str='', filter_action: Optional[str]=None, timeout: Optional[int]=None) -> Iterator[str]:
+	def run_kernel(self, args: Optional[List[str]]=None, build_dir: str='', filter_glob: str='', filter: str='', filter_action: Optional[str]=None, timeout: Optional[int]=None, outfile: Optional[str]=None) -> Iterator[str]:
+		"""Boots the kernel and yields its console output line by line.
+
+		The output is also written to `outfile`, which defaults to
+		test.log in the build directory.
+		"""
 		# Copy to avoid mutating the caller-supplied list. exec_tests() reuses
 		# the same args across repeated run_kernel() calls (e.g. --run_isolated),
 		# so appending to the original would accumulate stale flags on each call.
@@ -364,6 +381,9 @@ class LinuxSourceTree:
 		if filter_action:
 			args.append('kunit.filter_action=' + filter_action)
 		args.append('kunit.enable=1')
+
+		if outfile is None:
+			outfile = get_outfile_path(build_dir)
 
 		self._process = self._ops.start(args, build_dir)
 		assert self._process is not None # tell mypy it's set
@@ -382,7 +402,7 @@ class LinuxSourceTree:
 		waiter = threading.Thread(target=_wait_proc)
 		waiter.start()
 
-		output = open(get_outfile_path(build_dir), 'w')
+		output = open(outfile, 'w')
 		try:
 			# Tee the output to the file and to our caller in real time.
 			for line in self._process.stdout:

@@ -979,7 +979,7 @@ class KUnitMainTest(unittest.TestCase):
 		self.assertEqual(got, want)
 		# Should respect the user's filter glob when listing tests.
 		self.linux_source_mock.run_kernel.assert_called_once_with(
-			args=['kunit.action=list'], build_dir='.kunit', filter_glob='suite*', filter='', filter_action=None, timeout=300)
+			args=['kunit.action=list', 'log_buf_len=4M'], build_dir='.kunit', filter_glob='suite*', filter='', filter_action=None, timeout=300)
 
 	def test_list_tests_with_prefix(self):
 		want = ['suite.test1', 'suite.test2', 'suite2.test1']

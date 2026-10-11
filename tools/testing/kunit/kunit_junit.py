@@ -6,6 +6,7 @@
 
 from xml.sax.saxutils import quoteattr, XMLGenerator
 import xml.etree.ElementTree as ET
+import kunit_printer
 from kunit_parser import Test, TestStatus
 from typing import Optional
 
@@ -51,7 +52,7 @@ def get_junit_result(test: Test) -> str:
 def print_junit_result(test: Test) -> None:
 	root_element = get_test_suite(test, None)
 	ET.indent(root_element)
-	ET.dump(root_element)
+	kunit_printer.stdout.print(ET.tostring(root_element, encoding='unicode'))
 
 # Write an entire XML file for the test structure starting at test
 def write_junit_result(test: Test, filename: str) -> None:

@@ -19,6 +19,7 @@ import signal
 import subprocess
 import sys
 from typing import Iterable
+import xml.etree.ElementTree as ET
 
 import kunit_config
 import kunit_parser
@@ -738,6 +739,7 @@ class KUnitMainTest(unittest.TestCase):
 
 		self.mock_linux_init = mock.patch.object(kunit_kernel, 'LinuxSourceTree').start()
 		self.linux_source_mock = self.mock_linux_init.return_value
+		self.linux_source_mock.arch.return_value = 'um'
 		self.linux_source_mock.build_reconfig.return_value = True
 		self.linux_source_mock.build_kernel.return_value = True
 		self.linux_source_mock.run_kernel.return_value = all_passed_log
@@ -1048,6 +1050,65 @@ class KUnitMainTest(unittest.TestCase):
 				self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
 
 				kunit.main(['exec', '--run_isolated=suite'])
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_isolated_reports_include_all_kernels(self, mock_tests):
+		def fake_run_kernel(filter_glob, **kwargs):
+			if '.' in filter_glob:
+				suite, case = filter_glob.split('.')
+				failed = case == 'test1'
+			else:
+				suite, case = filter_glob, 'test'
+				failed = suite == 'suite1'
+			status = 'not ok' if failed else 'ok'
+			return ['KTAP version 1', '1..1', '    # Subtest: ' + suite,
+				'    1..1', f'    {status} 1 - {case}', f'{status} 1 - {suite}']
+		self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+
+		for isolation in ('suite', 'test'):
+			with self.subTest(isolation=isolation), \
+			     tempfile.TemporaryDirectory() as output_dir:
+				if isolation == 'suite':
+					mock_tests.return_value = ['suite1.test', 'suite2.test']
+					expected = [('suite1', 'test', 'FAIL'), ('suite2', 'test', 'PASS')]
+				else:
+					mock_tests.return_value = ['suite.test1', 'suite.test2']
+					expected = [('suite', 'test1', 'FAIL'), ('suite', 'test2', 'PASS')]
+				json_path = os.path.join(output_dir, 'results.json')
+				xml_path = os.path.join(output_dir, 'results.xml')
+				with self.assertRaises(SystemExit) as e:
+					kunit.main(['exec', '--run_isolated=' + isolation,
+						    '--json=' + json_path, '--junit=' + xml_path])
+				self.assertEqual(e.exception.code, 1)
+
+				with open(json_path) as f:
+					report = json.load(f)
+				self.assertEqual(report['misc']['tests'], 2)
+				self.assertEqual(report['misc']['failed'], 1)
+				self.assertEqual(report['arch'], 'um')
+				self.assertEqual([(suite['name'], case['name'], case['status'])
+					for suite in report['sub_groups'] for case in suite['test_cases']], expected)
+				root = ET.parse(xml_path).getroot()
+				self.assertEqual(root.get('tests'), '2')
+				self.assertEqual(root.get('failures'), '1')
+				self.assertEqual([(suite.get('name'), case.get('name'),
+					'FAIL' if case.find('failure') is not None else 'PASS')
+					for suite in root for case in suite], expected)
+
+	def test_single_kernel_reports_match_parse(self):
+		with tempfile.TemporaryDirectory() as output_dir:
+			json_path = os.path.join(output_dir, 'results.json')
+			xml_path = os.path.join(output_dir, 'results.xml')
+			reports = []
+			for args in (['exec'], ['parse', _test_data_path('test_is_test_passed-all_passed.log')]):
+				kunit.main(args + ['--json=' + json_path, '--junit=' + xml_path])
+				with open(json_path) as f:
+					report = json.load(f)
+				# Execution adds build metadata, which parse cannot know.
+				reports.append((report['misc'],
+					[(s['name'], s['test_cases']) for s in report['sub_groups']],
+					ET.tostring(ET.parse(xml_path).getroot())))
+			self.assertEqual(reports[0], reports[1])
 
 	@mock.patch.object(kunit, '_list_tests')
 	@mock.patch.object(sys, 'stdout', new_callable=io.StringIO)

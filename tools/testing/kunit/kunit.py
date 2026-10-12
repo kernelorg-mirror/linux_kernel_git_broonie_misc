@@ -191,6 +191,7 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 	metadata = kunit_json.Metadata(arch=linux.arch(), build_dir=request.build_dir, def_config='kunit_defconfig')
 
 	test_counts = kunit_parser.TestCounts()
+	test_failed = False
 	exec_time = 0.0
 	for i, filter_glob in enumerate(filter_globs):
 		stdout.print_with_timestamp('Starting KUnit Kernel ({}/{})...'.format(i+1, len(filter_globs)))
@@ -212,6 +213,9 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 		exec_time += test_end - test_start
 
 		test_counts.add_subtest_counts(test_result.counts)
+		# A kernel with no results has no failed test counts to aggregate.
+		if _map_to_overall_status(test_result.status) != KunitStatus.SUCCESS:
+			test_failed = True
 
 	if len(filter_globs) == 1 and test_counts.crashed > 0:
 		bd = request.build_dir
@@ -220,6 +224,8 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 				bd, bd, kunit_kernel.get_outfile_path(bd), bd, sys.argv[0]))
 
 	kunit_status = _map_to_overall_status(test_counts.get_status())
+	if test_failed:
+		kunit_status = KunitStatus.TEST_FAILURE
 	return KunitResult(status=kunit_status, elapsed_time=exec_time)
 
 def _map_to_overall_status(test_status: kunit_parser.TestStatus) -> KunitStatus:

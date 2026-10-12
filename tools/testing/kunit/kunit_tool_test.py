@@ -1019,6 +1019,37 @@ class KUnitMainTest(unittest.TestCase):
 		])
 
 	@mock.patch.object(kunit, '_list_tests')
+	def test_isolated_kernel_without_results_fails(self, mock_tests):
+		mock_tests.return_value = ['suite1.test1', 'suite2.test1']
+		for missing_output in ([], ['KTAP version 1', '1..0']):
+			for missing_suite in ('suite1', 'suite2'):
+				with self.subTest(output=missing_output,
+						 suite=missing_suite):
+					def fake_run_kernel(filter_glob, **kwargs):
+						if filter_glob == missing_suite:
+							return missing_output
+						return ['KTAP version 1', '1..1', 'ok 1 - test1']
+					self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+
+					with self.assertRaises(SystemExit) as e:
+						kunit.main(['exec', '--run_isolated=suite'])
+					self.assertEqual(e.exception.code, 1)
+
+	@mock.patch.object(kunit, '_list_tests')
+	def test_isolated_skipped_kernels_succeed(self, mock_tests):
+		mock_tests.return_value = ['suite1.test1', 'suite2.test1']
+		for all_skipped in (False, True):
+			with self.subTest(all_skipped=all_skipped):
+				def fake_run_kernel(filter_glob, **kwargs):
+					result = 'ok 1 - test1'
+					if all_skipped or filter_glob == 'suite1':
+						result += ' # SKIP unavailable'
+					return ['KTAP version 1', '1..1', result]
+				self.linux_source_mock.run_kernel.side_effect = fake_run_kernel
+
+				kunit.main(['exec', '--run_isolated=suite'])
+
+	@mock.patch.object(kunit, '_list_tests')
 	@mock.patch.object(sys, 'stdout', new_callable=io.StringIO)
 	def test_list_suites(self, mock_stdout, mock_tests):
 		mock_tests.return_value = ['suite.test1', 'suite.test2', 'suite2.test1']

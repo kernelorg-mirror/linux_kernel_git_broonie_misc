@@ -16,7 +16,7 @@ import time
 
 assert sys.version_info >= (3, 7), "Python version is too old"
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, auto
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -191,6 +191,10 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 	metadata = kunit_json.Metadata(arch=linux.arch(), build_dir=request.build_dir, def_config='kunit_defconfig')
 
 	test_counts = kunit_parser.TestCounts()
+	report = kunit_parser.Test()
+	report.name = 'main'
+	report.counts = test_counts
+	parse_request = replace(request, json=None, junit=None)
 	test_failed = False
 	exec_time = 0.0
 	for i, filter_glob in enumerate(filter_globs):
@@ -205,7 +209,7 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 			filter_action=request.filter_action,
 			build_dir=request.build_dir)
 
-		_, test_result = parse_tests(request, metadata, run_result)
+		_, test_result = parse_tests(parse_request, metadata, run_result)
 		# run_kernel() doesn't block on the kernel exiting.
 		# That only happens after we get the last line of output from `run_result`.
 		# So exec_time here actually contains parsing + execution time, which is fine.
@@ -216,6 +220,19 @@ def exec_tests(linux: kunit_kernel.LinuxSourceTree, request: KunitExecRequest) -
 		# A kernel with no results has no failed test counts to aggregate.
 		if _map_to_overall_status(test_result.status) != KunitStatus.SUCCESS:
 			test_failed = True
+		if request.json or request.junit:
+			if len(filter_globs) == 1:
+				report = test_result
+			else:
+				report.subtests.extend(test_result.subtests)
+				report.log.extend(test_result.log)
+	if len(filter_globs) != 1:
+		report.expected_count = len(report.subtests)
+		report.status = test_counts.get_status()
+		if test_failed and report.ok_status():
+			report.status = kunit_parser.TestStatus.FAILURE_TO_PARSE_TESTS
+	if not request.raw_output:
+		_write_test_results(request, metadata, report)
 
 	if len(filter_globs) == 1 and test_counts.crashed > 0:
 		bd = request.build_dir
@@ -264,6 +281,15 @@ def parse_tests(request: KunitParseRequest, metadata: kunit_json.Metadata, input
 		kunit_parser.print_test(test, request.failed, stdout)
 	kunit_parser.print_summary_line(test, stdout)
 
+	_write_test_results(request, metadata, test)
+
+	if test.status != kunit_parser.TestStatus.SUCCESS:
+		return KunitResult(KunitStatus.TEST_FAILURE, parse_time), test
+
+	return KunitResult(KunitStatus.SUCCESS, parse_time), test
+
+def _write_test_results(request: KunitParseRequest, metadata: kunit_json.Metadata,
+			test: kunit_parser.Test) -> None:
 	if request.json:
 		json_str = kunit_json.get_json_result(
 					test=test,
@@ -282,11 +308,6 @@ def parse_tests(request: KunitParseRequest, metadata: kunit_json.Metadata, input
 		else:
 			kunit_junit.write_junit_result(test=test,filename=request.junit)
 			stdout.print_with_timestamp(f"Test results stored in {os.path.abspath(request.junit)}")
-
-	if test.status != kunit_parser.TestStatus.SUCCESS:
-		return KunitResult(KunitStatus.TEST_FAILURE, parse_time), test
-
-	return KunitResult(KunitStatus.SUCCESS, parse_time), test
 
 def run_tests(linux: kunit_kernel.LinuxSourceTree,
 	      request: KunitRequest) -> KunitResult:
